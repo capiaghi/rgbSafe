@@ -28,10 +28,10 @@
 #include "ButtonHandler.hpp"
 #include "config.hpp"
 
-ButtonHandler::ButtonHandler() : 
-    m_buttonStateEnter(HIGH),
-    m_lastbuttonStateEnter(HIGH),
-    m_buttonEnterFlag(LOW)
+ButtonHandler::ButtonHandler() :
+	m_buttonStateEnter(HIGH),
+	m_lastbuttonStateEnter(HIGH),
+	m_buttonEnterFlag(LOW)
 {
 }
 
@@ -44,8 +44,8 @@ ButtonHandler::ButtonHandler() :
 ///
 uint8_t ButtonHandler::initialize()
 {
-    pinMode(BUTTON_ENTER_PIN, INPUT_PULLUP);
-    return RC_OK;
+	pinMode(BUTTON_ENTER_PIN, INPUT_PULLUP);
+	return RC_OK;
 }
 
 
@@ -60,12 +60,12 @@ uint8_t ButtonHandler::getEnterButtonState()
 {
 	if (m_buttonEnterFlag == HIGH)
 	{
-        m_buttonEnterFlag = LOW;
-		  return 1;
+		m_buttonEnterFlag = LOW;
+		return 1;
 	}
 	else
 	{
-        m_buttonEnterFlag = LOW;
+		m_buttonEnterFlag = LOW;
 		return 0;
 	}
 }
@@ -73,7 +73,7 @@ uint8_t ButtonHandler::getEnterButtonState()
 
 void ButtonHandler::clear()
 {
-    m_buttonEnterFlag = LOW;
+	m_buttonEnterFlag = LOW;
 }
 
 // ----------------------------------------------------------------------------
@@ -85,31 +85,31 @@ void ButtonHandler::clear()
 ///
 void ButtonHandler::update()
 {
-    // Read out buttons
-    int readingEnter = digitalRead(BUTTON_ENTER_PIN);
+	// Read out buttons
+	int readingEnter = digitalRead(BUTTON_ENTER_PIN);
 
-    // If the switch changed, due to noise or pressing:
-    if (readingEnter != m_lastbuttonStateEnter)
-    {
-        // reset the debouncing timer
-        m_lastDebounceTimeEnter = millis();
-    }
+	// If the switch changed, due to noise or pressing:
+	if (readingEnter != m_lastbuttonStateEnter)
+	{
+		// reset the debouncing timer
+		m_lastDebounceTimeEnter = millis();
+	}
 
-    if ((millis() - m_lastDebounceTimeEnter) > DEBOUNCE_DELAY)
-    {
-        // whatever the reading is at, it's been there for longer
-        // than the debounce delay, so take it as the actual current state:
-        // if the button state has changed:
-        if (readingEnter != m_buttonStateEnter)
-        {
-            m_buttonStateEnter = readingEnter;
+	if ((millis() - m_lastDebounceTimeEnter) > DEBOUNCE_DELAY)
+	{
+		// whatever the reading is at, it's been there for longer
+		// than the debounce delay, so take it as the actual current state:
+		// if the button state has changed:
+		if (readingEnter != m_buttonStateEnter)
+		{
+			m_buttonStateEnter = readingEnter;
 
-            if (m_buttonStateEnter == LOW)
-            {
-                m_buttonEnterFlag = HIGH;
-            }
-        }
-    }
+			if (m_buttonStateEnter == LOW)
+			{
+				m_buttonEnterFlag = HIGH;
+			}
+		}
+	}
 
-    m_lastbuttonStateEnter = readingEnter;
+	m_lastbuttonStateEnter = readingEnter;
 }
