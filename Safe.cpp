@@ -267,7 +267,6 @@ uint8_t Safe::accuracyGame()
 {
   // https://de.planetcalc.com/1129/
   m_errorCode = m_ha40p.getAngleDeg(m_angleDeg);
-m_angleDeg = 23.21;
   uint8_t degree = (uint8_t) m_angleDeg;
   float rest = m_angleDeg - degree;
   uint8_t minute = (uint8_t)(rest * 60.0);

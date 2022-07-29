@@ -57,6 +57,7 @@ const uint8_t kMatrixHeight = 32;       // known working: 32, 64, 96, 128
 const uint8_t RC_OK = 0;
 const uint8_t RC_INV_UART1_LENGTH = 1;
 const uint8_t RC_INV_UART1_COMMAND = 2;
+const uint8_t RC_INV_UART1_TIMEOUT = 3;
 
 
 const uint8_t INVALID_CODE = 1;

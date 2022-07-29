@@ -1,3 +1,4 @@
+
 // ****************************************************************************
 /// \file      rgbSafe.ino
 ///
@@ -7,6 +8,10 @@
 ///            RBG Matrix as display, HA40+ Encoder as safe wheel
 ///            Librarys for Adafruit Matrix Portal M4:
 ///            https://learn.adafruit.com/adafruit-matrixportal-m4/arduino-libraries
+
+///            https://learn.adafruit.com/adafruit-protomatter-rgb-matrix-library/arduino-library
+///            https://learn.adafruit.com/adafruit-gfx-graphics-library/graphics-primitives
+
 ///
 /// \author    Christoph Capiaghi
 ///
@@ -33,15 +38,15 @@
 //https://github.com/adafruit/Adafruit-GFX-Library/tree/master/Fonts
 #include <Fonts/FreeSansBold18pt7b.h> // Large friendly font
 #include <Fonts/Picopixel.h> // Large friendly font
-#include <Adafruit_SPIFlash.h>
-#include <Adafruit_TinyUSB.h>
-#include <SPI.h>
 #include "config.hpp"
 #include "ButtonHandler.hpp"
 #include "Safe.hpp"
 
 // Include pictures
-#include "hexagon.c"
+#include "pics/hexagon_28x32.c"
+//https://github.com/moononournation/Arduino_GFX/blob/master/examples/ImgViewer/ImgViewerPROGMEM/ImgViewerPROGMEM.ino
+#include "pics/greenSmiley_32x32.c"
+#include "pics/redSmiley_32x32.c"
 
 
 // Private types **************************************************************
@@ -79,88 +84,6 @@ textY,                  // Current text position (Y)
 textMin,                // Text pos. (X) when scrolled off left edge
 hue = 0;
 
-// FLASH FILESYSTEM STUFF --------------------------------------------------
-
-// External flash macros for QSPI or SPI are defined in board variant file.
-#if defined(EXTERNAL_FLASH_USE_QSPI)
-Adafruit_FlashTransport_QSPI flashTransport;
-#elif defined(EXTERNAL_FLASH_USE_SPI)
-Adafruit_FlashTransport_SPI flashTransport(EXTERNAL_FLASH_USE_CS,
-	EXTERNAL_FLASH_USE_SPI);
-#else
-#error No QSPI/SPI flash are defined in your board variant.h!
-#endif
-
-Adafruit_SPIFlash flash(&flashTransport);
-FatFileSystem filesys;     // Filesystem object from SdFat
-
-Adafruit_USBD_MSC usb_msc; // USB mass storage object
-
-
-// FUNCTIONS REQUIRED FOR USB MASS STORAGE ---------------------------------
-static bool msc_changed = true; // Is set true on filesystem changes
-// Callback on READ10 command.
-int32_t msc_read_cb(uint32_t lba, void* buffer, uint32_t bufsize) {
-	return flash.readBlocks(lba, (uint8_t*)buffer, bufsize / 512) ? bufsize : -1;
-}
-
-// Callback on WRITE10 command.
-int32_t msc_write_cb(uint32_t lba, uint8_t* buffer, uint32_t bufsize) {
-	digitalWrite(LED_BUILTIN, HIGH);
-	return flash.writeBlocks(lba, buffer, bufsize / 512) ? bufsize : -1;
-}
-
-// Callback on WRITE10 completion.
-void msc_flush_cb(void) {
-	flash.syncBlocks();   // Sync with flash
-	filesys.cacheClear(); // Clear filesystem cache to force refresh
-	digitalWrite(LED_BUILTIN, LOW);
-	msc_changed = true;
-}
-
-// Get number of files in a specified path that match extension ('filter').
-// Pass in absolute path (e.g. "/" or "/gifs") and extension WITHOUT period
-// (e.g. "gif", NOT ".gif").
-int16_t numFiles(const char* path, const char* filter) {
-	File dir = filesys.open(path);
-	if (!dir) return -1;
-	char filename[256];
-	for (int16_t num_files = 0;;) {
-		File entry = dir.openNextFile();
-		if (!entry) return num_files; // No more files
-		entry.getName(filename, sizeof(filename) - 1);
-		entry.close();
-		if (!entry.isDirectory() &&       // Skip directories
-			strncmp(filename, "._", 2)) { // and Mac junk files
-			char* extension = strrchr(filename, '.');
-			if (extension && !strcasecmp(&extension[1], filter)) num_files++;
-		}
-	}
-	return -1;
-}
-
-// Return name of file (matching extension) by index (0 to numFiles()-1)
-char* filenameByIndex(const char* path, const char* filter, int16_t index) {
-	static char filename[256]; // Must be static, we return a pointer to this!
-	File entry, dir = filesys.open(path);
-	if (!dir) return NULL;
-	while (entry = dir.openNextFile()) {
-		entry.getName(filename, sizeof(filename) - 1);
-		entry.close();
-		if (!entry.isDirectory() &&       // Skip directories
-			strncmp(filename, "._", 2)) { // and Mac junk files
-			char* extension = strrchr(filename, '.');
-			if (extension && !strcasecmp(&extension[1], filter)) {
-				if (!index--) {
-					return filename;
-				}
-			}
-		}
-	}
-	return NULL;
-}
-
-
 
 void setup() {
 
@@ -168,17 +91,6 @@ void setup() {
 	stm_entryFlag = TRUE;
 	stm_exitFlag = FALSE;
 	stm_newState = STM_STATE_STARTUP;
-
-	// USB mass storage / filesystem setup (do BEFORE Serial init)
-	flash.begin();
-	// Set disk vendor id, product id and revision
-	usb_msc.setID("Adafruit", "External Flash", "1.0");
-	// Set disk size, block size is 512 regardless of spi flash page size
-	usb_msc.setCapacity(flash.pageSize() * flash.numPages() / 512, 512);
-	usb_msc.setReadWriteCallback(msc_read_cb, msc_write_cb, msc_flush_cb);
-	usb_msc.setUnitReady(true); // MSC is ready for read/write
-	usb_msc.begin();
-	filesys.begin(&flash); // Start filesystem on the flash
 
 	// Serial: Interface to PC
 	// Serial1: HA40+ Encoder 
@@ -223,14 +135,17 @@ void setup() {
 	// http://adafruit.github.io/Adafruit-GFX-Library/html/class_adafruit___g_f_x.html#a805a15f1b3ea9eff5d1666b8e6db1c56
 	// Save via gimp -> c file
 	//matrix.drawRGBBitmap(0, 0, (const uint16_t *)hexagonLogo.pixel_data, hexagonLogo.width, hexagonLogo.height);
-	//matrix.show();
-
-  //https://learn.adafruit.com/adafruit-protomatter-rgb-matrix-library/arduino-library
-  //https://learn.adafruit.com/adafruit-gfx-graphics-library/graphics-primitives
-	float angleTest = 0.0;
-	//matrix.println("TEST");
-	//matrix.println(angleTest);
-	//matrix.show();
+  //matrix.drawRGBBitmap(0,0, greenSmiley, 300, 297);
+  matrix.drawRGBBitmap(0, 0, (const uint16_t*)greenSmiley_32x32, 32, 32);
+	matrix.show();
+  delay(3000);
+  matrix.fillScreen(BLACK); 
+  matrix.drawRGBBitmap(0, 0, (const uint16_t*)hexagon_28x32, 28, 32);
+  matrix.show();
+  delay(3000);
+  matrix.drawRGBBitmap(0, 0, (const uint16_t*)redSmiley_32x32, 32, 32);
+  matrix.show();
+  delay(3000);
 
 	Serial.println("Init complete");
 	showHTCRules();

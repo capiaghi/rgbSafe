@@ -151,8 +151,9 @@ uint8_t Encoder::getAngle(uint32_t &rawAngle)
 // No crc check implemented yet
   uint8_t recBuffer[9];
   uint8_t retries = 0;
-  while(Serial1.available() <= 0 || retries < 10)
+  while(Serial1.available() <= 0)
   {
+    if(retries > 10) return RC_INV_UART1_TIMEOUT;
     delay(1);
     retries++;
 #ifdef DEBUG
@@ -165,6 +166,7 @@ uint8_t Encoder::getAngle(uint32_t &rawAngle)
 #ifdef DEBUG
       Serial.print(F("Received bytes (UART1 RX): "));
       Serial.write(recBuffer, sizeof(recBuffer)/sizeof(recBuffer[0]));
+      Serial.println("");
 #endif
 
   if(recBuffer[ROMER_LENGTH_FIELD_RX] != ROMER_CMD_B_LENGTH_RX) return RC_INV_UART1_LENGTH;
