@@ -45,8 +45,11 @@ SerialHandler::SerialHandler() : m_rs485ModeEnable(0)
 uint8_t SerialHandler::initialize()
 {
   pinMode(TX_ENABLE_PIN, OUTPUT);
-  digitalWrite(TX_ENABLE_PIN, LOW);
+  enableRx();
   Serial1.begin( UART_SPEED , SERIAL_8N1 ); // Default, no parity
+  #ifdef DEBUG
+  Serial.println("SerialHandler init");
+  #endif
   return RC_OK;
 }
 
@@ -60,11 +63,13 @@ uint8_t SerialHandler::initialize()
 void SerialHandler::begin(unsigned long baudrate, uint16_t config)
 {
   Serial1.begin(baudrate , config );
+  while (!Serial1);
 }
 
 void SerialHandler::begin(unsigned long baudrate)
 {
-  begin(baudrate, SERIAL_8N1);
+  Serial1.begin(baudrate, SERIAL_8N1);
+  while (!Serial1);
 }
 
 
@@ -105,9 +110,9 @@ uint8_t SerialHandler::write(const uint8_t txData)
   uint8_t txDataWritten = 0;
   if (m_rs485ModeEnable == 1)
   {
-    digitalWrite(TX_ENABLE_PIN, LOW);
+    enableTx();
     txDataWritten = Serial1.write(txData);
-    digitalWrite(TX_ENABLE_PIN, HIGH);
+    Serial1.flush(); // Waits for the transmission of outgoing serial data to complete.
   }
   else 
   {
@@ -124,6 +129,7 @@ uint8_t SerialHandler::write(const uint8_t txData)
 
 uint8_t SerialHandler::write(const uint8_t txData[], uint8_t txDataLength)
 {
+  uint8_t txDataWritten = 0;
 #ifdef DEBUG
      Serial.println(F("Serial 1 write: "));
      for (uint8_t i = 0; i < txDataLength; i++)
@@ -133,7 +139,18 @@ uint8_t SerialHandler::write(const uint8_t txData[], uint8_t txDataLength)
      Serial.println("-------");
      
 #endif
-  return Serial1.write(txData, txDataLength);
+  if (m_rs485ModeEnable == 1)
+  {
+    enableTx();
+    txDataWritten = Serial1.write(txData, txDataLength);
+    Serial1.flush();
+    enableRx();
+    }
+    else 
+    {
+      txDataWritten = Serial1.write(txData, txDataLength);
+    }
+    return txDataWritten;
 }
 
 // ----------------------------------------------------------------------------
@@ -147,29 +164,41 @@ uint8_t SerialHandler::read(uint8_t& rxData)
 {
   if (m_rs485ModeEnable == 1)
   {
-    digitalWrite(TX_ENABLE_PIN, HIGH);
+    enableRx();
   }
   rxData = Serial1.read();
   return RC_OK;
 }
 
-size_t SerialHandler::readBytes( uint8_t *buffer, size_t length)
+size_t SerialHandler::readBytes( uint8_t *buffer, const size_t length)
 {
   if (m_rs485ModeEnable == 1)
   {
-    digitalWrite(TX_ENABLE_PIN, HIGH);
+    enableRx();
   }
   return Serial1.readBytes(buffer, length);
 }
 
 void SerialHandler::enableRs485Mode()
 {
-  digitalWrite(TX_ENABLE_PIN, LOW);
+  enableRx();
   m_rs485ModeEnable = 1;
 }
 
 void SerialHandler::disableRs485Mode()
 {
-  digitalWrite(TX_ENABLE_PIN, HIGH);
+  enableRx();
   m_rs485ModeEnable = 0;
+}
+
+void SerialHandler::enableRx()
+{
+  digitalWrite(TX_ENABLE_PIN, LOW);
+  delayMicroseconds(DELAY_US_PIN_STATE);
+}
+
+void SerialHandler::enableTx()
+{
+  digitalWrite(TX_ENABLE_PIN, HIGH);
+  delayMicroseconds(DELAY_US_PIN_STATE);
 }

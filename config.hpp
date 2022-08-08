@@ -36,11 +36,18 @@
 /// \details   Optional description (more detailed)
 
 //#define WOLFI ( 1 )
+#define ENCODER_TEST ( 1 )
 
 #define NO_BUTTON ( 1 )
 
 #define UART_SPEED		( 230400 )
-#define DEBUG			( 1 ) // Serial Debug enable
+#define DEBUG			// Serial Debug enable
+
+#undef UART_PASS_THROUG
+
+#ifdef UART_PASS_THROUG
+	#undef DEBUG
+#endif 
 
 #define HEIGHT			( 32 ) // Matrix height (pixels) - SET TO 64 FOR 64x64 MATRIX!
 #define WIDTH			( 32 ) // Matrix width (pixels)
@@ -67,6 +74,8 @@ const char SOFTWARE_VERSION[10] = "V1.0";
 
 const uint8_t runTimeS_WelcomeScreen = 4;
 
+const uint8_t DELAY_US_PIN_STATE = 10; // Wait time after digitalWrite (SerialHandler)
+
 // Define Pins  ************************************************************
 
 // Pinout RGB Matrix
@@ -77,10 +86,10 @@ static uint8_t latchPin = 15;
 static uint8_t oePin = 16;
 
 //static const uint8_t TRIGGER_PIN = 23;   // A1
-static const uint8_t LOCK_PIN = 23;  // A1
-static const uint8_t BUTTON_ENTER_PIN = 24;	// A2
-static const uint8_t RGB_LED_PIN = 25; // A3
-static const uint8_t TX_ENABLE_PIN = 26; // A4
+#define LOCK_PIN            A1  // A1
+#define BUTTON_ENTER_PIN    A2	// A2
+#define RGB_LED_PIN         A3 // A3
+#define TX_ENABLE_PIN       A4 // A4
 
 
 // Define Boolean Variable ************************************************************

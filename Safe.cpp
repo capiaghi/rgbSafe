@@ -265,36 +265,7 @@ uint8_t Safe::checkCode()
 ///
 uint8_t Safe::accuracyGame()
 {
-  // https://de.planetcalc.com/1129/
-  m_errorCode = m_ha40p.getAngleDeg(m_angleDeg);
-  uint8_t degree = (uint8_t) m_angleDeg;
-  float rest = m_angleDeg - degree;
-  uint8_t minute = (uint8_t)(rest * 60.0);
-  Serial.print("Rest Deg: "); Serial.println(rest);
-  rest = rest - ((float)minute / 60.0);
-  Serial.print("Rest Deg: "); Serial.println(rest);
-  uint8_t second = (uint8_t)(rest * 3600.0);
-  Serial.print("Angle Deg: "); Serial.println(degree);
-  Serial.print("Angle Min: "); Serial.println(minute);
-  Serial.print("Angle Sec: "); Serial.println(second);
-  
-  m_matrix->fillScreen(BLACK); // Fill background black
-  m_matrix->setFont(&FreeMonoBold7pt7b);  // Use nice bitmap font
-  m_matrix->setCursor(0, 8);
-  m_matrix->setTextColor(WHITE);
-  m_matrix->println("49");
-  m_matrix->drawCircle(20, 1, 1, WHITE); //todo degree symbol
-  m_matrix->setCursor(0, 18);
-  m_matrix->println("32'"); 
-  m_matrix->setCursor(0, 28);
-  m_matrix->print("31"); m_matrix->write(34);
-  m_matrix->println("");
-
-  // x, y, w, h, color
-  m_matrix->fillRect(0, 30, 10, 2, GREEN);
-
-  m_matrix->show();
-  
+  getAndDisplayAngles ();
   return m_errorCode;
 }
 
@@ -346,4 +317,43 @@ uint8_t Safe::directionChanged()
 		countDirection = CCW;
 	}
 	return DIRECTION_NOT_CHANGED;
+}
+
+uint8_t Safe::getAndDisplayAngles()
+{
+  uint8_t m_errorCode = RC_OK;
+  // Get Encoder Angle and calculate degree, minute and seconds
+  // https://de.planetcalc.com/1129/
+  m_errorCode = m_ha40p.getAngleDeg(m_angleDeg);
+  m_degree = (uint16_t) m_angleDeg;
+  float rest = m_angleDeg - m_degree;
+  m_minute = (uint16_t)(rest * 60.0);
+  Serial.print("Rest Deg: "); Serial.println(rest);
+  rest = rest - ((float)m_minute / 60.0);
+  Serial.print("Rest Deg: "); Serial.println(rest);
+  m_seconds = (uint16_t)(rest * 3600.0);
+  Serial.print("Angle Deg: "); Serial.println(m_degree);
+  Serial.print("Angle Min: "); Serial.println(m_minute);
+  Serial.print("Angle Sec: "); Serial.println(m_seconds);
+  
+  m_matrix->fillScreen(BLACK); // Fill background black
+  m_matrix->setFont(&FreeMonoBold7pt7b);  // Use nice bitmap font
+  m_matrix->setCursor(0, 8);
+  m_matrix->setTextColor(WHITE);
+  m_matrix->print(m_degree);
+  m_matrix->drawCircle(m_matrix->getCursorX() + 2, 1, 1, WHITE); //Degree symobl
+  m_matrix->setCursor(0, 18);
+  m_matrix->print(m_minute); m_matrix->println("'");
+  //m_matrix->println("32'"); 
+  m_matrix->setCursor(0, 28);
+  //m_matrix->print("31"); m_matrix->write(34);
+  m_matrix->print(m_seconds); m_matrix->write(34);
+  m_matrix->println("");
+
+  // x, y, w, h, color
+  m_matrix->fillRect(0, 30, 10, 2, GREEN);
+
+  m_matrix->show();
+  return RC_OK;
+  
 }

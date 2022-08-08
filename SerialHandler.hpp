@@ -23,4 +23,6 @@ public:
     
 private:   
     uint8_t m_rs485ModeEnable;
+    void enableRx();
+    void enableTx();
 };

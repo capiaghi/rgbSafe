@@ -41,6 +41,7 @@
 #include "config.hpp"
 #include "ButtonHandler.hpp"
 #include "Safe.hpp"
+#include "AccuracyGame.hpp"
 
 // Include pictures
 #include "pics/hexagon_28x32.c"
@@ -76,6 +77,9 @@ Adafruit_Protomatter matrix(
 // SafeClass
 Safe safe;
 
+// Accuracy Game
+AccuracyGame accuracyGame;
+
 // Button
 ButtonHandler enterButton;
 
@@ -93,10 +97,14 @@ void setup() {
 	stm_entryFlag = TRUE;
 	stm_exitFlag = FALSE;
 	stm_newState = STM_STATE_STARTUP;
+ 
+	pinMode(TX_ENABLE_PIN, OUTPUT);
+	digitalWrite(TX_ENABLE_PIN, LOW);
 
 	// Serial: Interface to PC
 	// Serial1: HA40+ Encoder 
 	Serial.begin(UART_SPEED);
+	while (!Serial); // wait for serial port to connect.
 	Serial1.begin(UART_SPEED);
 
 	// Initialize matrix
@@ -111,8 +119,11 @@ void setup() {
 
 	enterButton.initialize();
 	safe.initialize(&matrix);
+	accuracyGame.initialize(&matrix);
 
 	delay(1000);
+
+#ifndef ENCODER_TEST
 
 	// Set up the scrolling message...
 	sprintf(str, "HTC Rules!");
@@ -166,12 +177,16 @@ void setup() {
 
 	Serial.println("Init complete");
 	showHTCRules();
-
+#endif
 	stm_actState = STM_STATE_STARTUP;
 
 }
 void loop()
 {
+
+#ifdef UART_PASS_THROUG
+	SerialPassthrough();
+#endif
 
 	// Check button state
 #ifndef NO_BUTTON
@@ -200,8 +215,9 @@ void loop()
 			Serial.print("Software Version: ");
 			Serial.println(SOFTWARE_VERSION);
 
-			//matrix.drawRGBBitmap(0, 0, (const uint16_t*)hexagonLogo.pixel_data, hexagonLogo.width, hexagonLogo.height);
-			//matrix.show();
+			matrix.fillScreen(BLACK);
+			matrix.drawRGBBitmap(0, 0, (const uint16_t*)hexagon_28x32, 28, 32);
+			matrix.show();
 
 			delay(2000);
 
@@ -235,7 +251,7 @@ void loop()
     #ifdef WOLFI
 		if (safe.checkCode() == CORRECT_CODE) {} //todo
     #else
-    safe.accuracyGame();
+		accuracyGame.run();
     #endif
 
 		if (enterButton.getEnterButtonState())

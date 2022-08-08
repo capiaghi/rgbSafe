@@ -65,6 +65,9 @@ private:
 	float m_code[NUMBER_OF_CODE_ELEMENTS];
 	uint8_t codeNumber;
 	uint8_t countDirection;
+  uint16_t m_degree;
+  uint16_t m_minute;
+  uint16_t m_seconds;
 
 	Adafruit_Protomatter* m_matrix;
 
@@ -75,6 +78,7 @@ private:
 	Lock m_lock;
 
 	uint8_t openSafe();
+  uint8_t getAndDisplayAngles();
 
 	uint8_t showCode(uint8_t valuesToDisplay[]);
 	uint8_t directionChanged();
