@@ -39,7 +39,7 @@
 
 #define NO_BUTTON ( 1 )
 
-#define UART_SPEED		( 115200 )
+#define UART_SPEED		( 230400 )
 #define DEBUG			( 1 ) // Serial Debug enable
 
 #define HEIGHT			( 32 ) // Matrix height (pixels) - SET TO 64 FOR 64x64 MATRIX!
@@ -76,9 +76,12 @@ static uint8_t clockPin = 14;
 static uint8_t latchPin = 15;
 static uint8_t oePin = 16;
 
-static const uint8_t TRIGGER_PIN = 23;   // A1
+//static const uint8_t TRIGGER_PIN = 23;   // A1
+static const uint8_t LOCK_PIN = 23;  // A1
 static const uint8_t BUTTON_ENTER_PIN = 24;	// A2
-static const uint8_t LOCK_PIN = 25;	// A3
+static const uint8_t RGB_LED_PIN = 25; // A3
+static const uint8_t TX_ENABLE_PIN = 26; // A4
+
 
 // Define Boolean Variable ************************************************************
 #ifndef TRUE
