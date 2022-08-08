@@ -1,4 +1,4 @@
-
+ 
 // ****************************************************************************
 /// \file      rgbSafe.ino
 ///
@@ -47,6 +47,8 @@
 //https://github.com/moononournation/Arduino_GFX/blob/master/examples/ImgViewer/ImgViewerPROGMEM/ImgViewerPROGMEM.ino
 #include "pics/greenSmiley_32x32.c"
 #include "pics/redSmiley_32x32.c"
+#include "pics/doorOpen_20x32.c"
+#include "pics/doorClosed_23x32.c"
 
 
 // Private types **************************************************************
@@ -104,7 +106,7 @@ void setup() {
 	if (status != PROTOMATTER_OK) {
 		for (;;);
 	}
-	matrix.fillScreen(0);
+	matrix.fillScreen(BLACK);
 	matrix.show();
 
 	enterButton.initialize();
@@ -138,14 +140,29 @@ void setup() {
   //matrix.drawRGBBitmap(0,0, greenSmiley, 300, 297);
   matrix.drawRGBBitmap(0, 0, (const uint16_t*)greenSmiley_32x32, 32, 32);
 	matrix.show();
-  delay(3000);
+  delay(2000);
   matrix.fillScreen(BLACK); 
   matrix.drawRGBBitmap(0, 0, (const uint16_t*)hexagon_28x32, 28, 32);
   matrix.show();
-  delay(3000);
+  delay(2000);
   matrix.drawRGBBitmap(0, 0, (const uint16_t*)redSmiley_32x32, 32, 32);
   matrix.show();
-  delay(3000);
+  delay(2000);
+
+
+ for (uint8_t i = 0; i < 3 ; i++)
+ {
+  matrix.fillScreen(BLACK); 
+  matrix.drawRGBBitmap(0, 0, (const uint16_t*)doorOpen_20x32, 20, 32);
+  matrix.show();
+  delay(1000);
+  matrix.drawRGBBitmap(0, 0, (const uint16_t*)doorClosed_23x32, 23, 32);
+  matrix.show();
+  delay(1000);
+ }
+
+
+  
 
 	Serial.println("Init complete");
 	showHTCRules();
@@ -220,9 +237,6 @@ void loop()
     #else
     safe.accuracyGame();
     #endif
-
-    
-
 
 		if (enterButton.getEnterButtonState())
 		{

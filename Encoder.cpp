@@ -35,7 +35,7 @@ extern "C" {
 }
 
 
-Encoder::Encoder() : m_rawAngle(0)
+Encoder::Encoder() : m_serialHandler(), m_rawAngle(0)
 {
 
 }
@@ -49,25 +49,30 @@ Encoder::Encoder() : m_rawAngle(0)
 ///
 uint8_t Encoder::initialize()
 {
+
+  for (uint8_t i = 0; i < 10; i++)
+  {
+  m_serialHandler.initialize();
   // Set 8 bit mode, binary
   // Usage: It is necessary to write in 9 bit mode with the MSB 1
   // Trick: Write in 8 bit mode and add partiy bit (even or odd -> 1 is neccessary)
-  Serial1.end();
-  Serial1.begin( UART_SPEED , SERIAL_8O1 ); // odd parity
-  Serial1.write(0xFF);
-  Serial1.write(0xFF);
-  Serial1.write(0xAA);
-  Serial1.write(0xAA);
+  m_serialHandler.end();
+  m_serialHandler.begin( UART_SPEED , SERIAL_8O1 ); // odd parity
+  m_serialHandler.write(0xFF);
+  m_serialHandler.write(0xFF);
+  m_serialHandler.write(0xAA);
+  m_serialHandler.write(0xAA);
   //Serial1.end();
   //Serial1.begin( UART_SPEED , SERIAL_8E1 ); // even parity
   //Serial1.write(0x61);
   //Serial1.write(0x61);
-  Serial1.end();
-  Serial1.begin( UART_SPEED , SERIAL_8N1 ); // Default, no parity
-  // 8 bit mode, ASCII Mode shuold be activated. Test
-  
-	pinMode(BUTTON_ENTER_PIN, OUTPUT);
-	digitalWrite(BUTTON_ENTER_PIN, LOW);
+  m_serialHandler.end();
+  m_serialHandler.begin( UART_SPEED , SERIAL_8N1 ); // Default, no parity
+  // 8 bit mode, ASCII Mode should be activated. Test
+  delay(1000);
+  }
+	//pinMode(TRIGGER_PIN, OUTPUT);
+	//digitalWrite(TRIGGER_PIN, LOW);
 	return 0;
 }
 
@@ -114,9 +119,10 @@ uint8_t Encoder::getAngleGon(float &angleGon)
 ///
 uint8_t Encoder::trigger()
 {
-	digitalWrite(BUTTON_ENTER_PIN, HIGH);
-	delay(m_triggerDelayMs);
-	digitalWrite(BUTTON_ENTER_PIN, LOW);
+  // Not supported
+	//digitalWrite(TRIGGER_PIN, HIGH);
+	//delay(m_triggerDelayMs);
+	//digitalWrite(TRIGGER_PIN, LOW);
 	return RC_OK;
 }
 
@@ -140,7 +146,7 @@ uint8_t Encoder::getAngle(uint32_t &rawAngle)
 
   // The CRC8 byte is calculated from the whole command
   cmd[ROMER_CRC_FIELD_TX] = CSV_CalcCRC8(cmd, (uint32_t)(sizeof(cmd)/sizeof(cmd[0])) - 1); // size - 1: Without crc
-  Serial1.write(cmd, sizeof(cmd));
+  m_serialHandler.write(cmd, sizeof(cmd));
 	//trigger();
 
 // Now get angle
@@ -151,7 +157,7 @@ uint8_t Encoder::getAngle(uint32_t &rawAngle)
 // No crc check implemented yet
   uint8_t recBuffer[9];
   uint8_t retries = 0;
-  while(Serial1.available() <= 0)
+  while(m_serialHandler.available() <= 0)
   {
     if(retries > 10) return RC_INV_UART1_TIMEOUT;
     delay(1);
@@ -161,7 +167,7 @@ uint8_t Encoder::getAngle(uint32_t &rawAngle)
       Serial.println(retries);
 #endif
   }
-  Serial1.readBytes(recBuffer, (sizeof(recBuffer)/sizeof(recBuffer[0])));
+  m_serialHandler.readBytes(recBuffer, (sizeof(recBuffer)/sizeof(recBuffer[0])));
 
 #ifdef DEBUG
       Serial.print(F("Received bytes (UART1 RX): "));

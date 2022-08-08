@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include "SerialHandler.hpp"
 
 class Encoder
 {
@@ -12,7 +13,7 @@ public:
     uint8_t getAngleGon(float &angleGon);
 
 private:
-
+    SerialHandler m_serialHandler;
     static const uint8_t m_triggerDelayMs = 1;  // Delay between high and low time of trigger signal
     
     //Romer Protocol RX
