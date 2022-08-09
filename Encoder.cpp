@@ -4,7 +4,7 @@
 ///
 /// \brief     HA40+ Encoder Control
 ///
-/// \details   Controlls the HA40+ Encoder using UART 
+/// \details   Controlls the HA40+ Encoder using a Serial Handler (RS485 or UART) 
 ///
 /// \author    Christoph Capiaghi
 ///
@@ -21,7 +21,7 @@
 ///
 /// \bug       
 ///
-/// \warning   
+/// \warning   Only RS485 tested. UART not tested
 ///
 /// \todo     
 ///
@@ -35,39 +35,63 @@ extern "C" {
 }
 
 
-Encoder::Encoder() : m_serialHandler(), m_rawAngle(0)
+Encoder::Encoder() : m_rawAngle(0)
 {
 
 }
 
 // ----------------------------------------------------------------------------
 /// \brief     Initialize Encoder
-/// \detail    Set encoder to 8-bit, ASCII Mode
+/// \detail    Set encoder to 8-bit, ASCII Mode and checks, if register access was successfully
 /// \warning   
 /// \return    RC_Type
 /// \todo      
 ///
-uint8_t Encoder::initialize()
+uint8_t Encoder::initialize(SerialHandler *serialHandler)
 {
 #ifdef DEBUG
 Serial.println("Encoder Init");
 #endif
+  //m_serialHandler.initialize();
+  //m_serialHandler.enableRs485Mode();
 
-  m_serialHandler.initialize();
-  m_serialHandler.enableRs485Mode();
-  setEightBitMode();
+ m_serialHandler = serialHandler;
 
-  sendRomerGCmd();
-  uint8_t recBufferLength = 8;
-  uint8_t recBuffer[recBufferLength];
-  readRomerCmd(recBuffer, recBufferLength);
- 
-   return 0;
+ uint8_t retries = 0;
+ uint8_t validCmd = INVALID_CODE;
+ while (validCmd != CORRECT_CODE)
+ {
+    setEightBitMode();
+    sendRomerGCmd();
+    uint8_t recBufferLength = 8;
+    uint8_t recBuffer[recBufferLength];
+    readRomerCmd(recBuffer, recBufferLength);
+
+    if (recBuffer[ROMER_COMMAND_FIELD_RX] == ROMER_CMD_G_TX)
+    {
+#ifdef DEBUG
+        Serial.println(F("Valid command received (setEightBitMode)"));
+#endif
+        validCmd = CORRECT_CODE;
+    }
+    else
+    {
+        if (retries > 10) return RC_INV_UART1_TIMEOUT;
+        delay(EIGHT_BIT_MODE_WAIT_TIME_MS);
+        retries++;
+    }
+#ifdef DEBUG
+      Serial.print(F("Number of retries (setEightBitMode): "));
+      Serial.println(retries);
+#endif
+  }
+
+   return RC_OK;
 }
 
 // ----------------------------------------------------------------------------
 /// \brief     Get Encoder Angle in Degree
-/// \detail    
+/// \detail    Encoder Angle between 0 Degree and 360 Degree
 /// \warning   
 /// \return    RC_Type
 /// \todo      
@@ -85,7 +109,7 @@ uint8_t Encoder::getAngleDeg(float &angleDeg)
 
 // ----------------------------------------------------------------------------
 /// \brief     Get Encoder Angle in Rad
-/// \detail    
+/// \detail    Encoder Angle between 0 and 2*PI
 /// \warning   
 /// \return    RC_Type
 /// \todo      
@@ -116,26 +140,10 @@ uint8_t Encoder::getAngleGon(float &angleGon)
 }
 
 // ----------------------------------------------------------------------------
-/// \brief     Send hardware trigger to Encoder
-/// \detail    
-/// \warning   
-/// \return    RC_Type
-/// \todo      
-///
-uint8_t Encoder::trigger()
-{
-  // Not supported
-	//digitalWrite(TRIGGER_PIN, HIGH);
-	//delay(m_triggerDelayMs);
-	//digitalWrite(TRIGGER_PIN, LOW);
-	return RC_OK;
-}
-
-// ----------------------------------------------------------------------------
-/// \brief     Get Encoder raw Angle in Degree
+/// \brief     Get Encoder raw Angle
 /// \detail    Send Romer CMD B -> SW Trigger and get Trigger
 /// \warning   
-/// \return    RC_Type
+/// \return    RC_OK if return command was valid
 /// \todo  
 ///    
 uint8_t Encoder::getAngle(uint32_t &rawAngle)
@@ -143,37 +151,6 @@ uint8_t Encoder::getAngle(uint32_t &rawAngle)
 // First: Send CMD
     sendRomerBCmd();
 
-// Now get angle
- //Romer Protocol
-// | Address Field | Length | Command | Angle info field | Angle LSB | Angle | Angle | Angle MSB | CRC
-// Supported Protocol
-// | 0xXX         | 0x06   | 0x42    | XX                | XX        |  XX   | XX    | XX        | XX
-// No crc check implemented yet
-    /*
-  uint8_t recBufferLength = 9;
-  uint8_t recBuffer[recBufferLength];
-  uint8_t retries = 0;
-  while(m_serialHandler.available() <= 0)
-  {
-    if(retries > 10) return RC_INV_UART1_TIMEOUT;
-    delay(1);
-    retries++;
-#ifdef DEBUG
-      Serial.print(F("Number of retries (UART1 RX): "));
-      Serial.println(retries);
-#endif
-  }
-  m_serialHandler.readBytes(recBuffer, recBufferLength);
-
-#ifdef DEBUG
-      Serial.println(F("Received bytes (UART1 RX): "));
-      for(uint8_t i = 0; i < recBufferLength; i++)
-      {
-        Serial.print(recBuffer[i], HEX);
-        Serial.println("");
-      }
-#endif
-*/
   uint8_t recBufferLength = 9;
   uint8_t recBuffer[recBufferLength];
   //Romer Protocol
@@ -194,7 +171,9 @@ uint8_t Encoder::getAngle(uint32_t &rawAngle)
 	return RC_OK;
 }
 
-
+/// <summary>
+/// sendRomerBCmd: Sends Romer "B" Command (0x42) to Encoder
+/// </summary>
 void Encoder::sendRomerBCmd()
 {
     // First: Send CMD
@@ -208,15 +187,18 @@ void Encoder::sendRomerBCmd()
 
   // The CRC8 byte is calculated from the whole command
     cmd[ROMER_CRC_FIELD_TX] = CSV_CalcCRC8(cmd, (uint32_t)(sizeof(cmd) / sizeof(cmd[0])) - 1); // size - 1: Without crc
-    m_serialHandler.write(cmd, sizeof(cmd));
+    m_serialHandler->write(cmd, sizeof(cmd));
 }
 
+/// <summary>
+/// sendRomerGCmd: Sends Romer "G" Command (0x47) to Encoder
+/// </summary>
 void Encoder::sendRomerGCmd()
 {
     uint8_t cmd[] = { ROMER_CMD_B_ADDRESS_TX, ROMER_CMD_READ_REGISTER_LENGTH_TX, ROMER_CMD_G_TX, ROMER_REGISTER_ADDRESS_LSB, ROMER_REGISTER_ADDRESS_MSB, ROMER_CMD_G_NUMBER_OF_REGISTER, DEFAULT_CRC_VALUE };
     // The CRC8 byte is calculated from the whole command
     cmd[ROMER_CRC_FIELD_G_COMMAND_TX] = CSV_CalcCRC8(cmd, (uint32_t)(sizeof(cmd) / sizeof(cmd[0])) - 1); // size - 1: Without crc
-    m_serialHandler.write(cmd, sizeof(cmd));
+    m_serialHandler->write(cmd, sizeof(cmd));
 }
 
 /// <summary>
@@ -228,7 +210,7 @@ void Encoder::sendRomerGCmd()
 uint8_t Encoder::readRomerCmd(uint8_t recBuffer[], uint8_t recBufferLength)
 {
     uint8_t retries = 0;
-    while (m_serialHandler.available() <= 0)
+    while (m_serialHandler->available() <= 0)
     {
         if (retries > 10) return RC_INV_UART1_TIMEOUT;
         delay(1);
@@ -238,7 +220,7 @@ uint8_t Encoder::readRomerCmd(uint8_t recBuffer[], uint8_t recBufferLength)
         Serial.println(retries);
 #endif
     }
-    m_serialHandler.readBytes(recBuffer, recBufferLength);
+    m_serialHandler->readBytes(recBuffer, recBufferLength);
 
 #ifdef DEBUG
     Serial.println(F("Received bytes (UART1 RX): "));
@@ -251,18 +233,20 @@ uint8_t Encoder::readRomerCmd(uint8_t recBuffer[], uint8_t recBufferLength)
     return RC_OK;
 }
 
+/// <summary>
+/// Set 8 bit mode, binary
+/// Usage: It is necessary to write in 9 bit mode with the MSB 1
+/// Trick: Write in 8 bit mode and add partiy bit (even or odd -> 1 is neccessary)
+/// </summary>
 void Encoder::setEightBitMode()
 {
-    // Set 8 bit mode, binary
-    // Usage: It is necessary to write in 9 bit mode with the MSB 1
-    // Trick: Write in 8 bit mode and add partiy bit (even or odd -> 1 is neccessary)
-    m_serialHandler.end();
-    m_serialHandler.begin(UART_SPEED, SERIAL_8O1); // odd parity
+    m_serialHandler->end();
+    m_serialHandler->begin(UART_SPEED, SERIAL_8O1); // odd parity
 
-    m_serialHandler.write(0xFF);
-    m_serialHandler.write(0xFF);
-    m_serialHandler.write(0xAA);
-    m_serialHandler.write(0xAA);
-    m_serialHandler.end();
-    m_serialHandler.begin(UART_SPEED, SERIAL_8N1); // Default, no parity
+    m_serialHandler->write(0xFF);
+    m_serialHandler->write(0xFF);
+    m_serialHandler->write(0xAA);
+    m_serialHandler->write(0xAA);
+    m_serialHandler->end();
+    m_serialHandler->begin(UART_SPEED, SERIAL_8N1); // Default, no parity
 }

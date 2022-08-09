@@ -51,9 +51,9 @@ m_offset(0.0)
 /// \return    RC_Type
 /// \todo      Polarisation?
 ///
-uint8_t Safe::initialize(Adafruit_Protomatter* matrix)
+uint8_t Safe::initialize(Adafruit_Protomatter* matrix, SerialHandler* serialHandler)
 {
-	m_errorCode = m_ha40p.initialize();
+	m_errorCode = m_ha40p.initialize(serialHandler);
 	if (m_errorCode != RC_OK) return m_errorCode;
 
 	m_errorCode = m_lock.initialize();

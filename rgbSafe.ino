@@ -83,6 +83,9 @@ AccuracyGame accuracyGame;
 // Button
 ButtonHandler enterButton;
 
+// Serial Interface to Encoder
+SerialHandler serialHandler;
+
 char sensVal[50];
 char     str[50];                // Buffer to hold scrolling message text
 int16_t  textX = matrix.width(), // Current text position (X)
@@ -109,17 +112,24 @@ void setup() {
 
 	// Initialize matrix
 	ProtomatterStatus status = matrix.begin();
+#ifdef DEBUG
 	Serial.print("Protomatter begin() status: ");
 	Serial.println((int)status);
+#endif
 	if (status != PROTOMATTER_OK) {
 		for (;;);
 	}
 	matrix.fillScreen(BLACK);
 	matrix.show();
 
+	serialHandler.initialize();
+	serialHandler.enableRs485Mode();
+
 	enterButton.initialize();
-	safe.initialize(&matrix);
-	accuracyGame.initialize(&matrix);
+	safe.initialize(&matrix, &serialHandler);
+	accuracyGame.initialize(&matrix, &serialHandler);
+
+
 
 	delay(1000);
 
@@ -184,10 +194,6 @@ void setup() {
 void loop()
 {
 
-#ifdef UART_PASS_THROUG
-	SerialPassthrough();
-#endif
-
 	// Check button state
 #ifndef NO_BUTTON
 	enterButton.update();
@@ -210,10 +216,10 @@ void loop()
 		{
 #ifdef DEBUG
 			Serial.println(F("Entered STM_STATE_STARTUP"));
-#endif
 			Serial.println("rgbSafe");
 			Serial.print("Software Version: ");
 			Serial.println(SOFTWARE_VERSION);
+#endif
 
 			matrix.fillScreen(BLACK);
 			matrix.drawRGBBitmap(0, 0, (const uint16_t*)hexagon_28x32, 28, 32);
@@ -335,10 +341,11 @@ void showHTCRules()
 void SerialPassthrough()
 {
 	if (Serial.available()) {         // If anything comes in Serial (USB),
-		Serial1.write(Serial.read());   // read it and send it out Serial1
+		serialHandler.write(Serial.read());   // read it and send it out Serial1
 	}
 
-	if (Serial1.available()) {     // If anything comes in Serial1
-		Serial.write(Serial1.read());   // read it and send it out Serial (USB)
+	if (serialHandler.available()) {     // If anything comes in Serial1
+		Serial.write(serialHandler.read());   // read it and send it out Serial (USB)
 	}
 }
+

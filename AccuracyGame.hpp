@@ -11,7 +11,7 @@ class AccuracyGame
 {
 public:
 	AccuracyGame();
-	uint8_t initialize(Adafruit_Protomatter* matrix);
+	uint8_t initialize(Adafruit_Protomatter* matrix, SerialHandler* serialHandler);
 	uint8_t run();
 
 private:

@@ -10,7 +10,7 @@ class Safe
 {
 public:
 	Safe();
-	uint8_t initialize(Adafruit_Protomatter* matrix);
+	uint8_t initialize(Adafruit_Protomatter* matrix, SerialHandler* serialHandler);
 	uint8_t checkCode();
   uint8_t accuracyGame();
 	uint8_t setNewCode();
@@ -65,9 +65,9 @@ private:
 	float m_code[NUMBER_OF_CODE_ELEMENTS];
 	uint8_t codeNumber;
 	uint8_t countDirection;
-  uint16_t m_degree;
-  uint16_t m_minute;
-  uint16_t m_seconds;
+	uint16_t m_degree;
+	uint16_t m_minute;
+	uint16_t m_seconds;
 
 	Adafruit_Protomatter* m_matrix;
 

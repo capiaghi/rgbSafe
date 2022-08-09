@@ -113,6 +113,7 @@ uint8_t SerialHandler::write(const uint8_t txData)
     enableTx();
     txDataWritten = Serial1.write(txData);
     Serial1.flush(); // Waits for the transmission of outgoing serial data to complete.
+    delayMicroseconds(100);
   }
   else 
   {
@@ -123,6 +124,8 @@ uint8_t SerialHandler::write(const uint8_t txData)
      Serial.print(F("Serial 1 write: "));
      Serial.println(txData);
 #endif
+
+  enableRx(); //todo
 
   return txDataWritten;
 }
@@ -157,19 +160,24 @@ uint8_t SerialHandler::write(const uint8_t txData[], uint8_t txDataLength)
 /// \brief     Read data over UART or RS485
 /// \detail    
 /// \warning   
-/// \return    RC_Type
-/// \todo      Polarisation?
+/// \return    Serial1 data
+/// \todo      
 ///
-uint8_t SerialHandler::read(uint8_t& rxData)
+uint8_t SerialHandler::read()
 {
   if (m_rs485ModeEnable == 1)
   {
     enableRx();
   }
-  rxData = Serial1.read();
-  return RC_OK;
+  return Serial1.read();
 }
 
+/// <summary>
+/// Read Bytes from Serial1 port
+/// </summary>
+/// <param name="buffer">Buffer for data storage</param>
+/// <param name="length">Length of the buffer</param>
+/// <returns></returns>
 size_t SerialHandler::readBytes( uint8_t *buffer, const size_t length)
 {
   if (m_rs485ModeEnable == 1)
@@ -179,24 +187,36 @@ size_t SerialHandler::readBytes( uint8_t *buffer, const size_t length)
   return Serial1.readBytes(buffer, length);
 }
 
+/// <summary>
+/// Enables RS485 Mode: nRE, DE support
+/// </summary>
 void SerialHandler::enableRs485Mode()
 {
   enableRx();
   m_rs485ModeEnable = 1;
 }
 
+/// <summary>
+/// Disable RS485 Mode
+/// </summary>
 void SerialHandler::disableRs485Mode()
 {
   enableRx();
   m_rs485ModeEnable = 0;
 }
 
+/// <summary>
+/// Enable RX of the RS-485 driver. Disables TX.
+/// </summary>
 void SerialHandler::enableRx()
 {
   digitalWrite(TX_ENABLE_PIN, LOW);
   delayMicroseconds(DELAY_US_PIN_STATE);
 }
 
+/// <summary>
+/// Enable TX of the RS-485 driver. Disables RX.
+/// </summary>
 void SerialHandler::enableTx()
 {
   digitalWrite(TX_ENABLE_PIN, HIGH);

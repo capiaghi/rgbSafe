@@ -9,14 +9,14 @@ class Encoder
 public:
 
     Encoder();
-    uint8_t initialize();
+    uint8_t initialize(SerialHandler* serialHandler);
     uint8_t getAngleDeg(float &angleDeg);
     uint8_t getAngleRad(float &angleRad);
     uint8_t getAngleGon(float &angleGon);
 
 private:
-    SerialHandler m_serialHandler;
-    static const uint8_t m_triggerDelayMs = 1;  // Delay between high and low time of trigger signal
+    SerialHandler* m_serialHandler;
+    static const uint8_t EIGHT_BIT_MODE_WAIT_TIME_MS = 2;
     
     //Romer Protocol RX
     // | Address Field | Length | Command | Angle LSB | Angle | Angle | Angle MSB | CRC
@@ -57,10 +57,9 @@ private:
     static const uint8_t ROMER_CRC_FIELD_G_COMMAND_TX = 6;
 
 
-    uint32_t m_rawAngle;
+    uint32_t m_rawAngle; /// Raw angle 0 ... 2^32-1
     
     uint8_t getAngle(uint32_t &rawAngle);
-    uint8_t trigger( );
     void sendRomerBCmd();
     void sendRomerGCmd();
     uint8_t readRomerCmd(uint8_t recBuffer[], uint8_t recBufferLength);

@@ -49,9 +49,9 @@ m_offsetDeg(0.0)
 /// \return    RC_Type
 /// \todo      Polarisation?
 ///
-uint8_t AccuracyGame::initialize(Adafruit_Protomatter* matrix)
+uint8_t AccuracyGame::initialize(Adafruit_Protomatter* matrix, SerialHandler *serialHandler)
 {
-	m_errorCode = m_ha40p.initialize();
+	m_errorCode = m_ha40p.initialize(serialHandler);
 	if (m_errorCode != RC_OK) return m_errorCode;
 
 	m_errorCode = m_lock.initialize();
@@ -282,14 +282,19 @@ uint8_t AccuracyGame::getAndDisplayAngles()
   m_degree = (uint16_t) m_angleDeg;
   float rest = m_angleDeg - m_degree;
   m_minute = (uint16_t)(rest * 60.0);
+#ifdef DEBUG
   Serial.print("Rest Deg: "); Serial.println(rest);
+#endif
   rest = rest - ((float)m_minute / 60.0);
+#ifdef DEBUG
   Serial.print("Rest Deg: "); Serial.println(rest);
+#endif
   m_seconds = (uint16_t)(rest * 3600.0);
+#ifdef DEBUG
   Serial.print("Angle Deg: "); Serial.println(m_degree);
   Serial.print("Angle Min: "); Serial.println(m_minute);
   Serial.print("Angle Sec: "); Serial.println(m_seconds);
-  
+#endif
   m_matrix->fillScreen(BLACK); // Fill background black
   m_matrix->setFont(&FreeMonoBold7pt7b);  // Use nice bitmap font
   m_matrix->setCursor(0, 8);
