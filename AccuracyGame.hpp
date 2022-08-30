@@ -2,24 +2,24 @@
 
 #include <stdint.h>
 #include <Adafruit_Protomatter.h>
+#include <Adafruit_NeoPixel.h>
 #include "Encoder.hpp"
 #include "Lock.hpp"
-
-
 
 class AccuracyGame
 {
 public:
 	AccuracyGame();
-	uint8_t initialize(Adafruit_Protomatter* matrix, SerialHandler* serialHandler);
+	uint8_t initialize(Adafruit_Protomatter* matrix, SerialHandler* serialHandler, Adafruit_NeoPixel* neoPixels);
 	uint8_t run();
+  void reset();
 
 private:
-	static constexpr float ANGLE_HYSTERESYS_DEG = 1.0f;        // Hysteresys of angle in degree
+	static constexpr float ANGLE_HYSTERESYS_DEG = 1.0f;			// Hysteresys of angle in degree
 	static const uint32_t DEBOUNCE_DELAY_ENCODER_MS = 5000;		// This time defines, how long the correct code must be present
 	static const uint32_t SAFE_OPEN_TIME_MS = 5000;
-
-
+	static constexpr float TARGET_ANGLE = 100.0;
+  static constexpr float BAR_GRAPH_RESOLUTION_DEG = 5;
 
 	// Private types **************************************************************
 	/// \brief Used States
@@ -51,6 +51,8 @@ private:
 	float m_targetAngleDeg;
 
 	Adafruit_Protomatter* m_matrix;
+
+	Adafruit_NeoPixel* m_neoPixels;
 
 	// Angle Encoder HA40+ -----------------------------------------------------
 	Encoder m_ha40p;

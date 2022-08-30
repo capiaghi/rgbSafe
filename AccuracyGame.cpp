@@ -34,6 +34,7 @@
 #include "pics/redSmiley_32x32.c"
 #include "pics/greenSmiley_32x32.c"
 
+
 AccuracyGame::AccuracyGame() : m_errorCode(RC_OK),
 m_ha40p(),
 m_lock(),
@@ -49,7 +50,7 @@ m_offsetDeg(0.0)
 /// \return    RC_Type
 /// \todo      Polarisation?
 ///
-uint8_t AccuracyGame::initialize(Adafruit_Protomatter* matrix, SerialHandler *serialHandler)
+uint8_t AccuracyGame::initialize(Adafruit_Protomatter* matrix, SerialHandler *serialHandler, Adafruit_NeoPixel *neoPixels)
 {
 	m_errorCode = m_ha40p.initialize(serialHandler);
 	if (m_errorCode != RC_OK) return m_errorCode;
@@ -67,8 +68,17 @@ uint8_t AccuracyGame::initialize(Adafruit_Protomatter* matrix, SerialHandler *se
 	stm_newState = STM_STATE_ACCURACY_GAME_INIT;
 
 	m_matrix = matrix;
+	m_neoPixels = neoPixels;
+
 
 	return m_errorCode;
+}
+
+void AccuracyGame::reset()
+{
+  stm_actState = STM_STATE_ACCURACY_GAME_INIT;
+  stm_entryFlag = TRUE;
+  stm_exitFlag = FALSE;
 }
 
 // ----------------------------------------------------------------------------
@@ -96,6 +106,8 @@ uint8_t AccuracyGame::run()
 		// Get Offset
 		m_errorCode = m_ha40p.getAngleDeg(m_angleDeg);
 		m_offsetDeg = m_angleDeg;
+		m_neoPixels->clear();
+		m_neoPixels->show();
 
 #ifdef DEBUG
 		Serial.println("Offset");
@@ -124,8 +136,10 @@ uint8_t AccuracyGame::run()
 		}
 
 		getAndDisplayAngles();
+		m_neoPixels->clear();
+		m_neoPixels->show();
 
-		m_targetAngleDeg = 100.0; //TBD
+		m_targetAngleDeg = TARGET_ANGLE; //TBD
 
 		// Within tolerance?
 		if ((m_angleDeg > (m_targetAngleDeg - ANGLE_HYSTERESYS_DEG)) && (m_angleDeg < (m_targetAngleDeg + ANGLE_HYSTERESYS_DEG)))
@@ -200,7 +214,7 @@ uint8_t AccuracyGame::run()
 
 		m_matrix->drawRGBBitmap(0, 0, (const uint16_t*)greenSmiley_32x32, 32, 32);
 		m_matrix->show();
-		delay(2000);
+		//delay(2000);
 		openSafe();
 		stm_newState = STM_STATE_ACCURACY_GAME_CHECK_VALUE;
 		stm_entryFlag = FALSE;
@@ -263,8 +277,16 @@ uint8_t AccuracyGame::run()
 
 uint8_t AccuracyGame::openSafe()
 {
-	m_matrix->fillScreen(BLACK); // Fill background black to save power
-	m_matrix->show();
+
+	m_neoPixels->clear();
+
+	for (int i = 0; i < 8; i++) {
+		m_neoPixels->setPixelColor(i, m_neoPixels->Color(255, 255, 255));
+	}
+	m_neoPixels->show();
+
+	//m_matrix->fillScreen(BLACK); // Fill background black to save power
+	//m_matrix->show();
 	m_lock.openLock(SAFE_OPEN_TIME_MS);
 
 	return RC_OK;
@@ -308,7 +330,13 @@ uint8_t AccuracyGame::getAndDisplayAngles()
   m_matrix->println("");
 
   // x, y, w, h, color
-  m_matrix->fillRect(0, 30, 10, 2, GREEN);
+
+  float differenceDeg = abs(m_targetAngleDeg - m_angleDeg);
+  float barLength = 0.0;
+  if (differenceDeg > BAR_GRAPH_RESOLUTION_DEG) differenceDeg = BAR_GRAPH_RESOLUTION_DEG;
+  barLength = WIDTH - differenceDeg / BAR_GRAPH_RESOLUTION_DEG * WIDTH;
+
+  m_matrix->fillRect(0, 30, barLength , 2, GREEN);
 
   m_matrix->show();
   return RC_OK;

@@ -38,6 +38,7 @@
 //https://github.com/adafruit/Adafruit-GFX-Library/tree/master/Fonts
 #include <Fonts/FreeSansBold18pt7b.h> // Large friendly font
 #include <Fonts/Picopixel.h> // Large friendly font
+#include <Adafruit_NeoPixel.h>
 #include "config.hpp"
 #include "ButtonHandler.hpp"
 #include "Safe.hpp"
@@ -59,7 +60,7 @@ typedef enum stm_state_e
 {
 	STM_STATE_STARTUP,               /// Startup of the safe
 	STM_STATE_SAFE_MODE,             /// Checks the code input and opens safe
-	STM_STATE_SERIAL_PASS_THROUGH,   /// Passthrough: UART1 <-> UART
+	STM_STATE_RESET_ENCODER_VAL,   /// Passthrough: UART1 <-> UART
 } stm_state_t;
 
 // Static variables ***********************************************************
@@ -73,6 +74,9 @@ static stm_bool_t             stm_exitFlag;    // Flag for handling the exit act
 // Create a 32-pixel tall, 32 pixel wide matrix with the defined pins
 Adafruit_Protomatter matrix(
 	WIDTH, 4, 1, rgbPins, 4, addrPins, clockPin, latchPin, oePin, false);
+
+// Neopixel strip
+Adafruit_NeoPixel neoPixels(RGB_STRIP_NUMBER_OF_LEDS, RGB_STRIP_PIN, NEO_GRB + NEO_KHZ800);
 
 // SafeClass
 Safe safe;
@@ -127,9 +131,10 @@ void setup() {
 
 	enterButton.initialize();
 	safe.initialize(&matrix, &serialHandler);
-	accuracyGame.initialize(&matrix, &serialHandler);
-
-
+	neoPixels.begin();
+	neoPixels.setBrightness(100);
+	neoPixels.show(); // Initialize all pixels to 'off'
+	accuracyGame.initialize(&matrix, &serialHandler, &neoPixels);
 
 	delay(1000);
 
@@ -157,8 +162,8 @@ void setup() {
 	//void drawBitmap(int16_t x, int16_t y, uint8_t *bitmap, int16_t w, int16_t h, uint16_t color);
 	// http://adafruit.github.io/Adafruit-GFX-Library/html/class_adafruit___g_f_x.html#a805a15f1b3ea9eff5d1666b8e6db1c56
 	// Save via gimp -> c file
-	//matrix.drawRGBBitmap(0, 0, (const uint16_t *)hexagonLogo.pixel_data, hexagonLogo.width, hexagonLogo.height);
-  //matrix.drawRGBBitmap(0,0, greenSmiley, 300, 297);
+
+/*
   matrix.drawRGBBitmap(0, 0, (const uint16_t*)greenSmiley_32x32, 32, 32);
 	matrix.show();
   delay(2000);
@@ -171,6 +176,7 @@ void setup() {
   delay(2000);
 
 
+
  for (uint8_t i = 0; i < 3 ; i++)
  {
   matrix.fillScreen(BLACK); 
@@ -181,10 +187,7 @@ void setup() {
   matrix.show();
   delay(1000);
  }
-
-
-  
-
+ */
 	Serial.println("Init complete");
 	showHTCRules();
 #endif
@@ -262,7 +265,7 @@ void loop()
 
 		if (enterButton.getEnterButtonState())
 		{
-			stm_newState = STM_STATE_SERIAL_PASS_THROUGH;
+			stm_newState = STM_STATE_RESET_ENCODER_VAL;
 			stm_exitFlag = TRUE;
 		}
 		// Exit
@@ -275,24 +278,20 @@ void loop()
 		}
 		break;
 
-	case STM_STATE_SERIAL_PASS_THROUGH:
+	case STM_STATE_RESET_ENCODER_VAL:
 		// Entry action
 		if (stm_entryFlag == TRUE)
 		{
 #ifdef DEBUG
-			Serial.println(F("Entered STM_STATE_SERIAL_PASS_THROUGH"));
+			Serial.println(F("Entered STM_STATE_RESET_ENCODER_VAL"));
 #endif
 			stm_entryFlag = FALSE;
 			//stm_exitFlag = TRUE;
 		}
+    accuracyGame.reset();
 
-		SerialPassthrough();
-
-		if (enterButton.getEnterButtonState())
-		{
-			stm_newState = STM_STATE_STARTUP;
-			stm_exitFlag = TRUE;
-		}
+		stm_newState = STM_STATE_SAFE_MODE;
+		stm_exitFlag = TRUE;
 
 		// Exit
 		if (stm_exitFlag == TRUE)
@@ -335,17 +334,4 @@ void showHTCRules()
 		matrix.show();
 		delay(delayInMs); // 20 milliseconds = ~50 frames/second
 	}
-
 }
-
-void SerialPassthrough()
-{
-	if (Serial.available()) {         // If anything comes in Serial (USB),
-		serialHandler.write(Serial.read());   // read it and send it out Serial1
-	}
-
-	if (serialHandler.available()) {     // If anything comes in Serial1
-		Serial.write(serialHandler.read());   // read it and send it out Serial (USB)
-	}
-}
-

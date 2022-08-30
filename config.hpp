@@ -36,9 +36,9 @@
 /// \details   Optional description (more detailed)
 
 //#define WOLFI ( 1 )
-#define ENCODER_TEST ( 1 )
+//#define ENCODER_TEST ( 1 )
 
-#define NO_BUTTON ( 1 )
+#undef NO_BUTTON ( 1 )
 
 #define UART_SPEED		( 230400 )
 #define DEBUG			// Serial Debug enable
@@ -46,7 +46,7 @@
 #undef UART_PASS_THROUG
 
 #ifdef UART_PASS_THROUG
-	#undef DEBUG
+    #undef DEBUG
 #endif 
 
 #define HEIGHT			( 32 ) // Matrix height (pixels) - SET TO 64 FOR 64x64 MATRIX!
@@ -88,8 +88,11 @@ static uint8_t oePin = 16;
 //static const uint8_t TRIGGER_PIN = 23;   // A1
 #define LOCK_PIN            A1  // A1
 #define BUTTON_ENTER_PIN    A2	// A2
-#define RGB_LED_PIN         A3 // A3
+#define RGB_STRIP_PIN       A3 // A3
 #define TX_ENABLE_PIN       A4 // A4
+
+// Number of RGB LEDs on rgb strip
+static const uint32_t RGB_STRIP_NUMBER_OF_LEDS = 8;
 
 
 // Define Boolean Variable ************************************************************
