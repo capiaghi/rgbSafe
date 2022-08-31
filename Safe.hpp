@@ -14,6 +14,7 @@ public:
 	uint8_t checkCode();
   uint8_t accuracyGame();
 	uint8_t setNewCode();
+  uint8_t openSafe();
 
 private:
 	static constexpr float ANGLE_HYSTERESYS_DEG = 1.0f;        // Hysteresys of angle in degree
@@ -77,7 +78,7 @@ private:
 	// Lock-style Solenoid -----------------------------------------------------
 	Lock m_lock;
 
-	uint8_t openSafe();
+
   uint8_t getAndDisplayAngles();
 
 	uint8_t showCode(uint8_t valuesToDisplay[]);

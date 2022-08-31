@@ -271,9 +271,7 @@ uint8_t Safe::accuracyGame()
 
 uint8_t Safe::openSafe()
 {
-	//m_matrix->println("Safe should be open :-)");
 	m_lock.openLock(SAFE_OPEN_TIME_MS);
-
 	return RC_OK;
 }
 

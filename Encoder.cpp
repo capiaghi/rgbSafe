@@ -1,4 +1,3 @@
-
 // ****************************************************************************
 /// \file      Encoder.cpp
 ///
@@ -52,8 +51,6 @@ uint8_t Encoder::initialize(SerialHandler *serialHandler)
 #ifdef DEBUG
 Serial.println("Encoder Init");
 #endif
-  //m_serialHandler.initialize();
-  //m_serialHandler.enableRs485Mode();
 
  m_serialHandler = serialHandler;
 
@@ -62,7 +59,7 @@ Serial.println("Encoder Init");
  while (validCmd != CORRECT_CODE)
  {
     setEightBitMode();
-    sendRomerGCmd();
+    sendRomerGCmd(); // Check if eight bit mode was successfully done
     uint8_t recBufferLength = 8;
     uint8_t recBuffer[recBufferLength];
     readRomerCmd(recBuffer, recBufferLength);
@@ -76,7 +73,7 @@ Serial.println("Encoder Init");
     }
     else
     {
-        if (retries > 10) return RC_INV_UART1_TIMEOUT;
+        if (retries > NUMBER_OF_RETRIES) return RC_INV_UART1_TIMEOUT;
         delay(EIGHT_BIT_MODE_WAIT_TIME_MS);
         retries++;
     }
@@ -198,7 +195,7 @@ void Encoder::sendRomerGCmd()
     uint8_t cmd[] = { ROMER_CMD_B_ADDRESS_TX, ROMER_CMD_READ_REGISTER_LENGTH_TX, ROMER_CMD_G_TX, ROMER_REGISTER_ADDRESS_LSB, ROMER_REGISTER_ADDRESS_MSB, ROMER_CMD_G_NUMBER_OF_REGISTER, DEFAULT_CRC_VALUE };
     // The CRC8 byte is calculated from the whole command
     cmd[ROMER_CRC_FIELD_G_COMMAND_TX] = CSV_CalcCRC8(cmd, (uint32_t)(sizeof(cmd) / sizeof(cmd[0])) - 1); // size - 1: Without crc
-    m_serialHandler->write(cmd, sizeof(cmd));
+    m_serialHandler->write(cmd, sizeof(cmd)/ sizeof(cmd[0]));
 }
 
 /// <summary>
@@ -213,7 +210,7 @@ uint8_t Encoder::readRomerCmd(uint8_t recBuffer[], uint8_t recBufferLength)
     while (m_serialHandler->available() <= 0)
     {
         if (retries > 10) return RC_INV_UART1_TIMEOUT;
-        delay(1);
+        delay(5);
         retries++;
 #ifdef DEBUG
         Serial.print(F("Number of retries (UART1 RX): "));
@@ -243,10 +240,9 @@ void Encoder::setEightBitMode()
     m_serialHandler->end();
     m_serialHandler->begin(UART_SPEED, SERIAL_8O1); // odd parity
 
-    m_serialHandler->write(0xFF);
-    m_serialHandler->write(0xFF);
-    m_serialHandler->write(0xAA);
-    m_serialHandler->write(0xAA);
+    uint8_t cmd[] = {0xFF, 0xFF, 0xAA, 0xAA};
+    m_serialHandler->write(cmd, sizeof(cmd)/ sizeof(cmd[0]));
+    delay(100);
     m_serialHandler->end();
     m_serialHandler->begin(UART_SPEED, SERIAL_8N1); // Default, no parity
 }

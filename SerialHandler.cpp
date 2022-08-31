@@ -45,7 +45,8 @@ SerialHandler::SerialHandler() : m_rs485ModeEnable(0)
 uint8_t SerialHandler::initialize()
 {
   pinMode(TX_ENABLE_PIN, OUTPUT);
-  enableRx();
+  digitalWrite(TX_ENABLE_PIN, HIGH);
+  enableTx();
   Serial1.begin( UART_SPEED , SERIAL_8N1 ); // Default, no parity
   #ifdef DEBUG
   Serial.println("SerialHandler init");
@@ -124,7 +125,6 @@ uint8_t SerialHandler::write(const uint8_t txData)
      Serial.print(F("Serial 1 write: "));
      Serial.println(txData);
 #endif
-
   enableRx(); //todo
 
   return txDataWritten;
@@ -192,7 +192,6 @@ size_t SerialHandler::readBytes( uint8_t *buffer, const size_t length)
 /// </summary>
 void SerialHandler::enableRs485Mode()
 {
-  enableRx();
   m_rs485ModeEnable = 1;
 }
 

@@ -1,4 +1,3 @@
- 
 // ****************************************************************************
 /// \file      rgbSafe.ino
 ///
@@ -8,10 +7,14 @@
 ///            RBG Matrix as display, HA40+ Encoder as safe wheel
 ///            Librarys for Adafruit Matrix Portal M4:
 ///            https://learn.adafruit.com/adafruit-matrixportal-m4/arduino-libraries
-
+///
 ///            https://learn.adafruit.com/adafruit-protomatter-rgb-matrix-library/arduino-library
 ///            https://learn.adafruit.com/adafruit-gfx-graphics-library/graphics-primitives
-
+///
+///           void drawBitmap(int16_t x, int16_t y, uint8_t *bitmap, int16_t w, int16_t h, uint16_t color);
+///           http://adafruit.github.io/Adafruit-GFX-Library/html/class_adafruit___g_f_x.html#a805a15f1b3ea9eff5d1666b8e6db1c56
+///           Save via gimp -> c file
+///
 ///
 /// \author    Christoph Capiaghi
 ///
@@ -39,9 +42,9 @@
 #include <Fonts/FreeSansBold18pt7b.h> // Large friendly font
 #include <Fonts/Picopixel.h> // Large friendly font
 #include <Adafruit_NeoPixel.h>
+#include <arduino-timer.h>
 #include "config.hpp"
 #include "ButtonHandler.hpp"
-#include "Safe.hpp"
 #include "AccuracyGame.hpp"
 
 // Include pictures
@@ -49,8 +52,6 @@
 //https://github.com/moononournation/Arduino_GFX/blob/master/examples/ImgViewer/ImgViewerPROGMEM/ImgViewerPROGMEM.ino
 #include "pics/greenSmiley_32x32.c"
 #include "pics/redSmiley_32x32.c"
-#include "pics/doorOpen_20x32.c"
-#include "pics/doorClosed_23x32.c"
 
 
 // Private types **************************************************************
@@ -70,16 +71,13 @@ static stm_state_t            stm_newState;    // New State variable
 static stm_bool_t             stm_entryFlag;   // Flag for handling the entry action
 static stm_bool_t             stm_exitFlag;    // Flag for handling the exit action
 
-
 // Create a 32-pixel tall, 32 pixel wide matrix with the defined pins
 Adafruit_Protomatter matrix(
 	WIDTH, 4, 1, rgbPins, 4, addrPins, clockPin, latchPin, oePin, false);
 
 // Neopixel strip
 Adafruit_NeoPixel neoPixels(RGB_STRIP_NUMBER_OF_LEDS, RGB_STRIP_PIN, NEO_GRB + NEO_KHZ800);
-
-// SafeClass
-Safe safe;
+Adafruit_NeoPixel onBoardNeoPixel(1, RGB_ONBOARD_LED_PIN, NEO_GRB + NEO_KHZ800);
 
 // Accuracy Game
 AccuracyGame accuracyGame;
@@ -90,13 +88,12 @@ ButtonHandler enterButton;
 // Serial Interface to Encoder
 SerialHandler serialHandler;
 
-char sensVal[50];
-char     str[50];                // Buffer to hold scrolling message text
-int16_t  textX = matrix.width(), // Current text position (X)
-textY,                  // Current text position (Y)
-textMin,                // Text pos. (X) when scrolled off left edge
-hue = 0;
+Timer<1, millis, Adafruit_NeoPixel *> rbgStripTimer; // 1 concurrent tasks, using millis as resolution
 
+Timer<> openSafeTimer; // 1 concurrent tasks, using millis as resolution
+
+uint32_t prevTime = 0; // Used for frames-per-second throttle
+uint8_t errorCode = 0;
 
 void setup() {
 
@@ -105,13 +102,12 @@ void setup() {
 	stm_exitFlag = FALSE;
 	stm_newState = STM_STATE_STARTUP;
  
-	pinMode(TX_ENABLE_PIN, OUTPUT);
-	digitalWrite(TX_ENABLE_PIN, LOW);
-
 	// Serial: Interface to PC
 	// Serial1: HA40+ Encoder 
+  #ifdef DEBUG
 	Serial.begin(UART_SPEED);
-	while (!Serial); // wait for serial port to connect.
+  #endif
+	//while (!Serial); // wait for serial port to connect.
 	Serial1.begin(UART_SPEED);
 
 	// Initialize matrix
@@ -124,79 +120,53 @@ void setup() {
 		for (;;);
 	}
 	matrix.fillScreen(BLACK);
+  matrix.setRotation( ROT90 );
 	matrix.show();
 
 	serialHandler.initialize();
 	serialHandler.enableRs485Mode();
 
 	enterButton.initialize();
-	safe.initialize(&matrix, &serialHandler);
+
 	neoPixels.begin();
 	neoPixels.setBrightness(100);
 	neoPixels.show(); // Initialize all pixels to 'off'
-	accuracyGame.initialize(&matrix, &serialHandler, &neoPixels);
 
-	delay(1000);
+  onBoardNeoPixel.begin();
+  onBoardNeoPixel.setBrightness(5);
+  onBoardNeoPixel.setPixelColor(0, onBoardNeoPixel.Color(0, 255, 0));
+  onBoardNeoPixel.show(); // Initialize all pixels to 'off'
 
-#ifndef ENCODER_TEST
-
-	// Set up the scrolling message...
-	sprintf(str, "HTC Rules!");
-	matrix.setFont(&FreeSansBold18pt7b); // Use nice bitmap font
-	matrix.setTextWrap(false);           // Allow text off edge
-	matrix.setTextColor(WHITE);         // White
-  matrix.setRotation( ROT90 );
-
-	int16_t  x1, y1;
-	uint16_t w, h;
-	matrix.getTextBounds(str, 0, 0, &x1, &y1, &w, &h); // How big is it?
-	textMin = -w; // All text is off left edge when it reaches this point
-	textY = matrix.height() / 2 - (y1 + h / 2); // Center text vertically
-	// Note: when making scrolling text like this, the setTextWrap(false)
-	// call is REQUIRED (to allow text to go off the edge of the matrix),
-	// AND it must be BEFORE the getTextBounds() call (or else that will
-	// return the bounds of "wrapped" text).
-	// Example from doublebuffer_scrolltext
-
-
-	//void drawBitmap(int16_t x, int16_t y, uint8_t *bitmap, int16_t w, int16_t h, uint16_t color);
-	// http://adafruit.github.io/Adafruit-GFX-Library/html/class_adafruit___g_f_x.html#a805a15f1b3ea9eff5d1666b8e6db1c56
-	// Save via gimp -> c file
-
-/*
-  matrix.drawRGBBitmap(0, 0, (const uint16_t*)greenSmiley_32x32, 32, 32);
-	matrix.show();
-  delay(2000);
-  matrix.fillScreen(BLACK); 
-  matrix.drawRGBBitmap(0, 0, (const uint16_t*)hexagon_28x32, 28, 32);
-  matrix.show();
-  delay(2000);
-  matrix.drawRGBBitmap(0, 0, (const uint16_t*)redSmiley_32x32, 32, 32);
-  matrix.show();
-  delay(2000);
-
-
-
- for (uint8_t i = 0; i < 3 ; i++)
- {
-  matrix.fillScreen(BLACK); 
-  matrix.drawRGBBitmap(0, 0, (const uint16_t*)doorOpen_20x32, 20, 32);
-  matrix.show();
-  delay(1000);
-  matrix.drawRGBBitmap(0, 0, (const uint16_t*)doorClosed_23x32, 23, 32);
-  matrix.show();
-  delay(1000);
- }
- */
-	Serial.println("Init complete");
-	showHTCRules();
+#ifdef SHOW_HTC
+  showHTCRules();
 #endif
+  
+  errorCode = accuracyGame.initialize(&matrix, &serialHandler, &neoPixels, &rbgStripTimer);
+
+  if (errorCode != 0) errorHandler();
+
+#ifdef DEBUG
+	Serial.println("Init complete");
+#endif
+
+
+
 	stm_actState = STM_STATE_STARTUP;
 
 }
 void loop()
 {
+  rbgStripTimer.tick(); // tick timer
+  openSafeTimer.tick();
+  // Limit the animation frame rate to MAX_FPS.  Because the subsequent sand
+  // calculations are non-deterministic (don't always take the same amount
+  // of time, depending on their current states), this helps ensure that
+  // things constant in the simulation.
+  uint32_t t;
+  while(((t = micros()) - prevTime) < (1000000L / MAX_FPS));
+  prevTime = t;
 
+  
 	// Check button state
 #ifndef NO_BUTTON
 	enterButton.update();
@@ -228,7 +198,7 @@ void loop()
 			matrix.drawRGBBitmap(0, 0, (const uint16_t*)hexagon_28x32, 28, 32);
 			matrix.show();
 
-			delay(2000);
+			delay(DISPLAY_LOGO_MS);
 
 			stm_newState = STM_STATE_SAFE_MODE;
 			stm_entryFlag = FALSE;
@@ -244,7 +214,7 @@ void loop()
 			stm_entryFlag = TRUE;
 		}
 		break;
-
+///-------------------------------------------
 	case STM_STATE_SAFE_MODE:
 		// Entry action
 		if (stm_entryFlag == TRUE)
@@ -252,16 +222,13 @@ void loop()
 #ifdef DEBUG
 			Serial.println(F("Entered STM_STATE_SAFE_MODE"));
 #endif
+      openSafeTimer.cancel();
 			stm_entryFlag = FALSE;
-			//stm_exitFlag = TRUE;
 		}
 
+		errorCode = accuracyGame.run();
 
-    #ifdef WOLFI
-		if (safe.checkCode() == CORRECT_CODE) {} //todo
-    #else
-		accuracyGame.run();
-    #endif
+    if (errorCode != 0) errorHandler();
 
 		if (enterButton.getEnterButtonState())
 		{
@@ -277,7 +244,8 @@ void loop()
 			stm_entryFlag = TRUE;
 		}
 		break;
-
+    
+///-------------------------------------------
 	case STM_STATE_RESET_ENCODER_VAL:
 		// Entry action
 		if (stm_entryFlag == TRUE)
@@ -289,9 +257,13 @@ void loop()
 			//stm_exitFlag = TRUE;
 		}
     accuracyGame.reset();
+    
+    openSafeTimer.in(EMERGENCY_SAFE_OPEN_MS, changeState);
 
-		stm_newState = STM_STATE_SAFE_MODE;
-		stm_exitFlag = TRUE;
+    if (enterButton.getEnterButtonState())
+    {
+      accuracyGame.openSafe();
+    }
 
 		// Exit
 		if (stm_exitFlag == TRUE)
@@ -312,11 +284,44 @@ void loop()
 
 }
 
+bool changeState(void *)
+{
+    stm_newState = STM_STATE_SAFE_MODE;
+    stm_exitFlag = TRUE;
+  return true;
+}
+
+void errorHandler() {
+  onBoardNeoPixel.setPixelColor(0, onBoardNeoPixel.Color(255, 0, 0));
+  onBoardNeoPixel.show(); // Initialize all pixels to 'off'
+}
+
 void showHTCRules()
 {
-	matrix.setFont(&FreeSansBold18pt7b);  // Use nice bitmap font
-	matrix.setTextWrap(false);            // Allow text off edge
-	matrix.setTextColor(WHITE);           // White
+  char sensVal[50];
+  char     str[50];                // Buffer to hold scrolling message text
+  int16_t  textX = matrix.width(), // Current text position (X)
+  textY,                            // Current text position (Y)
+  textMin,                         // Text pos. (X) when scrolled off left edge
+  hue = 0;
+
+ // Set up the scrolling message...
+  sprintf(str, "HTC Rules!"); 
+  matrix.setFont(&FreeSansBold18pt7b);  // Use nice bitmap font
+  matrix.setTextWrap(false);            // Allow text off edge
+  matrix.setTextColor(WHITE);           // White
+
+  int16_t  x1, y1;
+  uint16_t w, h;
+  matrix.getTextBounds(str, 0, 0, &x1, &y1, &w, &h); // How big is it?
+  textMin = -w; // All text is off left edge when it reaches this point
+  textY = matrix.height() / 2 - (y1 + h / 2); // Center text vertically
+  // Note: when making scrolling text like this, the setTextWrap(false)
+  // call is REQUIRED (to allow text to go off the edge of the matrix),
+  // AND it must be BEFORE the getTextBounds() call (or else that will
+  // return the bounds of "wrapped" text).
+  // Example from doublebuffer_scrolltext
+
 	float framesPerSecond = 50.0;
 	uint32_t delayInMs = round(1000.0 / framesPerSecond);
 	uint32_t counter = round(runTimeS_WelcomeScreen * framesPerSecond);
