@@ -35,6 +35,21 @@
 #include "pics/greenSmiley_32x32.c"
 
 
+// ----------------------------------------------------------------------------
+/// \brief     Turn off rgb led strip
+/// \detail    Timer calls this function
+/// \warning   
+/// \return    
+/// \todo      
+///
+bool turnOffRgbStrip(Adafruit_NeoPixel *neoPixels)
+{
+  neoPixels->clear();
+  neoPixels->show();
+  return true; // repeat? true
+}
+
+
 AccuracyGame::AccuracyGame() : m_errorCode(RC_OK),
 m_ha40p(),
 m_lock(),
@@ -50,32 +65,37 @@ m_offsetDeg(0.0)
 /// \return    RC_Type
 /// \todo      Polarisation?
 ///
-uint8_t AccuracyGame::initialize(Adafruit_Protomatter* matrix, SerialHandler *serialHandler, Adafruit_NeoPixel *neoPixels)
+uint8_t AccuracyGame::initialize(Adafruit_Protomatter* matrix, SerialHandler *serialHandler, Adafruit_NeoPixel *neoPixels, Timer<1, millis, Adafruit_NeoPixel *>* rbgStripTimer)
 {
+  // State Machine
+  stm_entryFlag = TRUE;
+  stm_exitFlag = FALSE;
+  stm_newState = STM_STATE_ACCURACY_GAME_INIT;
+
+  m_matrix = matrix;
+  m_neoPixels = neoPixels;
+  m_rbgStripTimer = rbgStripTimer;
+
+  
+  m_errorCode = m_lock.initialize();
+  if (m_errorCode != RC_OK) return m_errorCode;
+
 	m_errorCode = m_ha40p.initialize(serialHandler);
 	if (m_errorCode != RC_OK) return m_errorCode;
 
-	m_errorCode = m_lock.initialize();
-	if (m_errorCode != RC_OK) return m_errorCode;
 
 	// Get Offset
 	m_errorCode = m_ha40p.getAngleDeg(m_angleDeg);
 	m_offsetDeg = m_angleDeg;
 
-	// State Machine
-	stm_entryFlag = TRUE;
-	stm_exitFlag = FALSE;
-	stm_newState = STM_STATE_ACCURACY_GAME_INIT;
-
-	m_matrix = matrix;
-	m_neoPixels = neoPixels;
-
-
+  m_barGraphResolution = BAR_GRAPH_RESOLUTION_DEG;
 	return m_errorCode;
 }
 
 void AccuracyGame::reset()
 {
+  m_matrix->fillScreen(BLACK); // Fill background black
+  m_matrix->show();
   stm_actState = STM_STATE_ACCURACY_GAME_INIT;
   stm_entryFlag = TRUE;
   stm_exitFlag = FALSE;
@@ -106,8 +126,6 @@ uint8_t AccuracyGame::run()
 		// Get Offset
 		m_errorCode = m_ha40p.getAngleDeg(m_angleDeg);
 		m_offsetDeg = m_angleDeg;
-		m_neoPixels->clear();
-		m_neoPixels->show();
 
 #ifdef DEBUG
 		Serial.println("Offset");
@@ -135,11 +153,20 @@ uint8_t AccuracyGame::run()
 			stm_exitFlag = FALSE;
 		}
 
-		getAndDisplayAngles();
-		m_neoPixels->clear();
-		m_neoPixels->show();
+    m_targetAngleDeg = TARGET_ANGLE;
+    m_targetAngleDegKids = TARGET_ANGLE_KIDS;
+    
+    if (m_angleDeg > 200)
+    {
+      m_barGraphResolution = BAR_GRAPH_RESOLUTION_KIDS_DEG;
+      getAndDisplayAngles(m_targetAngleDegKids);
+    }
+    else
+    {
+      m_barGraphResolution = BAR_GRAPH_RESOLUTION_DEG;
+      getAndDisplayAngles(m_targetAngleDeg);
+    }
 
-		m_targetAngleDeg = TARGET_ANGLE; //TBD
 
 		// Within tolerance?
 		if ((m_angleDeg > (m_targetAngleDeg - ANGLE_HYSTERESYS_DEG)) && (m_angleDeg < (m_targetAngleDeg + ANGLE_HYSTERESYS_DEG)))
@@ -149,6 +176,15 @@ uint8_t AccuracyGame::run()
 			stm_entryFlag = FALSE;
 			stm_exitFlag = TRUE;
 		}
+
+    // Within tolerance?
+    if ((m_angleDeg > (m_targetAngleDegKids - ANGLE_HYSTERESYS_DEG_KIDS)) && (m_angleDeg < (m_targetAngleDegKids + ANGLE_HYSTERESYS_DEG_KIDS)))
+    {
+      m_lastDebounceTime = millis(); // Reset timer
+      stm_newState = STM_STATE_ACCURACY_GAME_IN_TOLERANCE_KIDS;
+      stm_entryFlag = FALSE;
+      stm_exitFlag = TRUE;
+    }
 
 		// Exit
 		if (stm_exitFlag == TRUE)
@@ -173,7 +209,7 @@ uint8_t AccuracyGame::run()
 			stm_exitFlag = FALSE;
 		}
 
-		getAndDisplayAngles();
+		getAndDisplayAngles(m_targetAngleDeg);
 
 		// Within tolerance?
 		if ((m_angleDeg < (m_targetAngleDeg - ANGLE_HYSTERESYS_DEG)) || (m_angleDeg > (m_targetAngleDeg + ANGLE_HYSTERESYS_DEG)))
@@ -201,6 +237,59 @@ uint8_t AccuracyGame::run()
 		}
 		break;
 
+
+    case STM_STATE_ACCURACY_GAME_IN_TOLERANCE_KIDS:
+
+    if (stm_entryFlag == TRUE)
+    {
+#ifdef DEBUG
+      Serial.println(F("Entered STM_STATE_ACCURACY_GAME_IN_TOLERANCE_KIDS"));
+#endif
+      stm_entryFlag = FALSE;
+      stm_exitFlag = FALSE;
+    }
+    if (m_angleDeg > 200)
+    {
+      m_barGraphResolution = BAR_GRAPH_RESOLUTION_KIDS_DEG;
+      getAndDisplayAngles(m_targetAngleDegKids);
+    }
+    else
+    {
+      m_barGraphResolution = BAR_GRAPH_RESOLUTION_DEG;
+      getAndDisplayAngles(m_targetAngleDeg);
+    }
+    getAndDisplayAngles(m_targetAngleDegKids);
+
+    // Within tolerance?
+    if ((m_angleDeg < (m_targetAngleDegKids - ANGLE_HYSTERESYS_DEG_KIDS)) || (m_angleDeg > (m_targetAngleDegKids + ANGLE_HYSTERESYS_DEG_KIDS)))
+    {
+      stm_newState = STM_STATE_ACCURACY_GAME_OVER;
+      stm_entryFlag = FALSE;
+      stm_exitFlag = TRUE;
+    }
+
+    // Check if the value was steady
+    if ((millis() - m_lastDebounceTime) > DEBOUNCE_DELAY_ENCODER_MS)
+    {
+      stm_newState = STM_STATE_ACCURACY_GAME_WIN;
+      stm_entryFlag = FALSE;
+      stm_exitFlag = TRUE;
+    }
+
+
+    // Exit
+    if (stm_exitFlag == TRUE)
+    {
+      stm_exitFlag = FALSE;
+      stm_actState = stm_newState;
+      stm_entryFlag = TRUE;
+    }
+    break;
+
+
+
+    
+
 	case STM_STATE_ACCURACY_GAME_WIN:
 
 		if (stm_entryFlag == TRUE)
@@ -214,9 +303,8 @@ uint8_t AccuracyGame::run()
 
 		m_matrix->drawRGBBitmap(0, 0, (const uint16_t*)greenSmiley_32x32, 32, 32);
 		m_matrix->show();
-		//delay(2000);
 		openSafe();
-		stm_newState = STM_STATE_ACCURACY_GAME_CHECK_VALUE;
+		stm_newState = STM_STATE_ACCURACY_GAME_INIT;
 		stm_entryFlag = FALSE;
 		stm_exitFlag = TRUE;
 
@@ -245,7 +333,7 @@ uint8_t AccuracyGame::run()
 		m_matrix->drawRGBBitmap(0, 0, (const uint16_t*)redSmiley_32x32, 32, 32);
 		m_matrix->show();
 		delay(2000);
-		stm_newState = STM_STATE_ACCURACY_GAME_CHECK_VALUE;
+		stm_newState = STM_STATE_ACCURACY_GAME_INIT;
 		stm_entryFlag = FALSE;
 		stm_exitFlag = TRUE;
 
@@ -258,8 +346,6 @@ uint8_t AccuracyGame::run()
 			stm_entryFlag = TRUE;
 		}
 		break;
-
-
 
 		//==============================================================================
   // DEFAULT
@@ -284,15 +370,14 @@ uint8_t AccuracyGame::openSafe()
 		m_neoPixels->setPixelColor(i, m_neoPixels->Color(255, 255, 255));
 	}
 	m_neoPixels->show();
-
-	//m_matrix->fillScreen(BLACK); // Fill background black to save power
-	//m_matrix->show();
+  m_rbgStripTimer->in((RGB_STRIP_ILLUMINATION_TIME_S*1000), turnOffRgbStrip, m_neoPixels);
+  
 	m_lock.openLock(SAFE_OPEN_TIME_MS);
 
 	return RC_OK;
 }
 
-uint8_t AccuracyGame::getAndDisplayAngles()
+uint8_t AccuracyGame::getAndDisplayAngles(float targetAngleDeg)
 {
   uint8_t m_errorCode = RC_OK;
   // Get Encoder Angle and calculate degree, minute and seconds
@@ -330,15 +415,14 @@ uint8_t AccuracyGame::getAndDisplayAngles()
   m_matrix->println("");
 
   // x, y, w, h, color
-
-  float differenceDeg = abs(m_targetAngleDeg - m_angleDeg);
+  // Calculate bar graph
+  float differenceDeg = abs(targetAngleDeg - m_angleDeg);
   float barLength = 0.0;
-  if (differenceDeg > BAR_GRAPH_RESOLUTION_DEG) differenceDeg = BAR_GRAPH_RESOLUTION_DEG;
-  barLength = WIDTH - differenceDeg / BAR_GRAPH_RESOLUTION_DEG * WIDTH;
+  if (differenceDeg > m_barGraphResolution) differenceDeg = m_barGraphResolution;
+  barLength = WIDTH - differenceDeg / m_barGraphResolution * WIDTH;
 
   m_matrix->fillRect(0, 30, barLength , 2, GREEN);
 
   m_matrix->show();
   return RC_OK;
-  
 }

@@ -16,7 +16,8 @@ public:
 
 private:
     SerialHandler* m_serialHandler;
-    static const uint8_t EIGHT_BIT_MODE_WAIT_TIME_MS = 2;
+    static const uint8_t EIGHT_BIT_MODE_WAIT_TIME_MS = 1;
+    static const uint8_t NUMBER_OF_RETRIES = 100;
     
     //Romer Protocol RX
     // | Address Field | Length | Command | Angle LSB | Angle | Angle | Angle MSB | CRC
