@@ -57,8 +57,8 @@ private:
     static const uint8_t ROMER_CMD_G_NUMBER_OF_REGISTER = 0x01;
     static const uint8_t ROMER_CRC_FIELD_G_COMMAND_TX = 6;
 
-
-    uint32_t m_rawAngle; /// Raw angle 0 ... 2^32-1
+    uint8_t m_initStatus; /// Init complete?
+    uint32_t m_rawAngle;  /// Raw angle 0 ... 2^32-1
     
     uint8_t getAngle(uint32_t &rawAngle);
     void sendRomerBCmd();

@@ -4,21 +4,21 @@
 /// \brief     Main file for RGB Safe (Leica Event and Wolfi Present)
 ///
 /// \details   Safe which contains some goodies, protected by a passcode.
-///            RBG Matrix as display, HA40+ Encoder as safe wheel
+///            RBG Matrix as display, HA40 Encoder as safe wheel
 ///            Librarys for Adafruit Matrix Portal M4:
 ///            https://learn.adafruit.com/adafruit-matrixportal-m4/arduino-libraries
 ///
 ///            https://learn.adafruit.com/adafruit-protomatter-rgb-matrix-library/arduino-library
 ///            https://learn.adafruit.com/adafruit-gfx-graphics-library/graphics-primitives
-///
-///           void drawBitmap(int16_t x, int16_t y, uint8_t *bitmap, int16_t w, int16_t h, uint16_t color);
-///           http://adafruit.github.io/Adafruit-GFX-Library/html/class_adafruit___g_f_x.html#a805a15f1b3ea9eff5d1666b8e6db1c56
-///           Save via gimp -> c file
+///            Example to save via gimp -> c file
+///            void drawBitmap(int16_t x, int16_t y, uint8_t *bitmap, int16_t w, int16_t h, uint16_t color);
+///            http://adafruit.github.io/Adafruit-GFX-Library/html/class_adafruit___g_f_x.html#a805a15f1b3ea9eff5d1666b8e6db1c56
+///           
 ///
 ///
 /// \author    Christoph Capiaghi
 ///
-/// \version   0.1
+/// \version   1.0
 ///
 /// \date      20220721
 /// 
@@ -39,20 +39,15 @@
 #include <Adafruit_Protomatter.h>
 // https://learn.adafruit.com/adafruit-gfx-graphics-library/using-fonts
 //https://github.com/adafruit/Adafruit-GFX-Library/tree/master/Fonts
-#include <Fonts/FreeSansBold18pt7b.h> // Large friendly font
-#include <Fonts/Picopixel.h> // Large friendly font
-#include <Adafruit_NeoPixel.h>
-#include <arduino-timer.h>
-#include "config.hpp"
-#include "ButtonHandler.hpp"
-#include "AccuracyGame.hpp"
-
-// Include pictures
-#include "pics/hexagon_28x32.c"
-//https://github.com/moononournation/Arduino_GFX/blob/master/examples/ImgViewer/ImgViewerPROGMEM/ImgViewerPROGMEM.ino
-#include "pics/greenSmiley_32x32.c"
-#include "pics/redSmiley_32x32.c"
-
+#include <Fonts/FreeSansBold18pt7b.h> /// Large friendly font
+#include <Fonts/Picopixel.h>          /// Large friendly font
+#include <Adafruit_NeoPixel.h>        /// RGB Strip
+#include <arduino-timer.h>            /// Timer for RGB Strip or lock
+#include "config.hpp"                 /// Global configurations for the safe
+#include "ButtonHandler.hpp"          /// Button Hanlder (debouncing)
+#include "AccuracyGame.hpp"           /// Accuracy Game
+#include "SafeGame.hpp"               /// Safe Game
+#include "Safe.hpp"                   /// Safe
 
 // Private types **************************************************************
 /// \brief Used States
@@ -60,16 +55,17 @@
 typedef enum stm_state_e
 {
 	STM_STATE_STARTUP,               /// Startup of the safe
-	STM_STATE_SAFE_MODE,             /// Checks the code input and opens safe
-	STM_STATE_RESET_ENCODER_VAL,   /// Passthrough: UART1 <-> UART
+	STM_STATE_ACCURACY_GAME_MODE,    /// Accuracy Game
+  STM_STATE_SAFE_MODE,             /// Safe Mode
+	STM_STATE_RESET_ENCODER_VAL,     /// Passthrough: UART1 <-> UART
 } stm_state_t;
 
 // Static variables ***********************************************************
 typedef unsigned char stm_bool_t;
-static stm_state_t            stm_actState;    // Actual State variable
-static stm_state_t            stm_newState;    // New State variable
-static stm_bool_t             stm_entryFlag;   // Flag for handling the entry action
-static stm_bool_t             stm_exitFlag;    // Flag for handling the exit action
+static stm_state_t            stm_actState;    /// Actual State variable
+static stm_state_t            stm_newState;    /// New State variable
+static stm_bool_t             stm_entryFlag;   /// Flag for handling the entry action
+static stm_bool_t             stm_exitFlag;    /// Flag for handling the exit action
 
 // Create a 32-pixel tall, 32 pixel wide matrix with the defined pins
 Adafruit_Protomatter matrix(
@@ -79,21 +75,20 @@ Adafruit_Protomatter matrix(
 Adafruit_NeoPixel neoPixels(RGB_STRIP_NUMBER_OF_LEDS, RGB_STRIP_PIN, NEO_GRB + NEO_KHZ800);
 Adafruit_NeoPixel onBoardNeoPixel(1, RGB_ONBOARD_LED_PIN, NEO_GRB + NEO_KHZ800);
 
-// Accuracy Game
-AccuracyGame accuracyGame;
 
-// Button
-ButtonHandler enterButton;
+AccuracyGame accuracyGame;      /// Accuracy Game
+SafeGame safeGame;              /// Safe simulation
+Safe safe;                      /// Safe itself
+ButtonHandler enterButton;      /// Button
+SerialHandler serialHandler;    /// Serial Interface to Encoder (RS-485)
 
-// Serial Interface to Encoder
-SerialHandler serialHandler;
 
-Timer<1, millis, Adafruit_NeoPixel *> rbgStripTimer; // 1 concurrent tasks, using millis as resolution
+Timer<1, millis, Adafruit_NeoPixel *> rbgStripTimer; /// Timer: 1 concurrent tasks, using millis as resolution
 
-Timer<> openSafeTimer; // 1 concurrent tasks, using millis as resolution
+Timer<> openSafeTimer;                                /// Timer: concurrent tasks, using millis as resolution
 
-uint32_t prevTime = 0; // Used for frames-per-second throttle
-uint8_t errorCode = 0;
+uint32_t prevTime = 0;  /// Used for frames-per-second throttle
+uint8_t errorCode = 0;  /// Error Code
 
 void setup() {
 
@@ -103,14 +98,13 @@ void setup() {
 	stm_newState = STM_STATE_STARTUP;
  
 	// Serial: Interface to PC
-	// Serial1: HA40+ Encoder 
+	// Serial1: HA40 Encoder 
   #ifdef DEBUG
 	Serial.begin(UART_SPEED);
   #endif
-	//while (!Serial); // wait for serial port to connect.
 	Serial1.begin(UART_SPEED);
 
-	// Initialize matrix
+	// Initialize rgb matrix
 	ProtomatterStatus status = matrix.begin();
 #ifdef DEBUG
 	Serial.print("Protomatter begin() status: ");
@@ -120,7 +114,7 @@ void setup() {
 		for (;;);
 	}
 	matrix.fillScreen(BLACK);
-  matrix.setRotation( ROT90 );
+  matrix.setRotation( ROT90 ); // Display is 90° mounted
 	matrix.show();
 
 	serialHandler.initialize();
@@ -137,19 +131,20 @@ void setup() {
   onBoardNeoPixel.setPixelColor(0, onBoardNeoPixel.Color(0, 255, 0));
   onBoardNeoPixel.show(); // Initialize all pixels to 'off'
 
-#ifdef SHOW_HTC
-  showHTCRules();
-#endif
-  
-  errorCode = accuracyGame.initialize(&matrix, &serialHandler, &neoPixels, &rbgStripTimer);
+  showHTCRules(); // Warning: This function takes approx. 4 s. Needed for Encoder startup
 
+  errorCode = safe.initialize(&matrix, &serialHandler, &neoPixels, &rbgStripTimer);
+  if (errorCode != 0) errorHandler();
+
+  errorCode = safeGame.initialize(&safe);
+  if (errorCode != 0) errorHandler();
+  
+  errorCode = accuracyGame.initialize(&safe);
   if (errorCode != 0) errorHandler();
 
 #ifdef DEBUG
 	Serial.println("Init complete");
 #endif
-
-
 
 	stm_actState = STM_STATE_STARTUP;
 
@@ -194,9 +189,7 @@ void loop()
 			Serial.println(SOFTWARE_VERSION);
 #endif
 
-			matrix.fillScreen(BLACK);
-			matrix.drawRGBBitmap(0, 0, (const uint16_t*)hexagon_28x32, 28, 32);
-			matrix.show();
+      safe.displayHexagonLogo();
 
 			delay(DISPLAY_LOGO_MS);
 
@@ -214,15 +207,50 @@ void loop()
 			stm_entryFlag = TRUE;
 		}
 		break;
+
 ///-------------------------------------------
-	case STM_STATE_SAFE_MODE:
+  case STM_STATE_SAFE_MODE:
+    // Entry action
+    if (stm_entryFlag == TRUE)
+    {
+#ifdef DEBUG
+      Serial.println(F("Entered STM_STATE_SAFE_MODE"));
+#endif
+      openSafeTimer.cancel();
+      safeGame.initialize(&safe);
+      stm_entryFlag = FALSE;
+    }
+
+    errorCode = safeGame.run();
+
+    if (errorCode != 0) errorHandler();
+
+    if (enterButton.getEnterButtonState())
+    {
+      stm_newState = STM_STATE_ACCURACY_GAME_MODE;
+      stm_exitFlag = TRUE;
+    }
+    // Exit
+    if (stm_exitFlag == TRUE)
+    {
+      //clearScreen();
+      stm_exitFlag = FALSE;
+      stm_actState = stm_newState;
+      stm_entryFlag = TRUE;
+    }
+    break;
+
+    
+///-------------------------------------------
+	case STM_STATE_ACCURACY_GAME_MODE:
 		// Entry action
 		if (stm_entryFlag == TRUE)
 		{
 #ifdef DEBUG
-			Serial.println(F("Entered STM_STATE_SAFE_MODE"));
+			Serial.println(F("Entered STM_STATE_ACCURACY_GAME_MODE"));
 #endif
       openSafeTimer.cancel();
+      accuracyGame.reset();
 			stm_entryFlag = FALSE;
 		}
 
@@ -244,6 +272,7 @@ void loop()
 			stm_entryFlag = TRUE;
 		}
 		break;
+
     
 ///-------------------------------------------
 	case STM_STATE_RESET_ENCODER_VAL:
@@ -262,12 +291,12 @@ void loop()
 
     if (enterButton.getEnterButtonState())
     {
-      accuracyGame.openSafe();
+      safe.openSafe();
     }
 
 		// Exit
 		if (stm_exitFlag == TRUE)
-		{
+		{ö
 			//clearScreen();
 			stm_exitFlag = FALSE;
 			stm_actState = stm_newState;
@@ -286,14 +315,14 @@ void loop()
 
 bool changeState(void *)
 {
-    stm_newState = STM_STATE_SAFE_MODE;
+    stm_newState = STM_STATE_STARTUP;
     stm_exitFlag = TRUE;
   return true;
 }
 
 void errorHandler() {
   onBoardNeoPixel.setPixelColor(0, onBoardNeoPixel.Color(255, 0, 0));
-  onBoardNeoPixel.show(); // Initialize all pixels to 'off'
+  onBoardNeoPixel.show();
 }
 
 void showHTCRules()

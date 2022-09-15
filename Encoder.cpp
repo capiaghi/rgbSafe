@@ -34,7 +34,7 @@ extern "C" {
 }
 
 
-Encoder::Encoder() : m_rawAngle(0)
+Encoder::Encoder() : m_rawAngle(0), m_initStatus(INIT_NOT_COMPLETE)
 {
 
 }
@@ -48,16 +48,18 @@ Encoder::Encoder() : m_rawAngle(0)
 ///
 uint8_t Encoder::initialize(SerialHandler *serialHandler)
 {
+  
 #ifdef DEBUG
 Serial.println("Encoder Init");
 #endif
+  m_serialHandler = serialHandler;
 
- m_serialHandler = serialHandler;
-
- uint8_t retries = 0;
- uint8_t validCmd = INVALID_CODE;
- while (validCmd != CORRECT_CODE)
- {
+  if (m_initStatus == INIT_COMPLETE) return RC_OK;
+ 
+  uint8_t retries = 0;
+  uint8_t validCmd = INVALID_CODE;
+  while (validCmd != CORRECT_CODE)
+  {
     setEightBitMode();
     sendRomerGCmd(); // Check if eight bit mode was successfully done
     uint8_t recBufferLength = 8;

@@ -31,15 +31,33 @@
 #include "config.hpp"
 #include <Fonts/Picopixel.h> // Large friendly font
 #include "FreeMonoBold7pt7b.h" // Create with https://rop.nl/truetype2gfx/
+// Include pictures
+//https://github.com/moononournation/Arduino_GFX/blob/master/examples/ImgViewer/ImgViewerPROGMEM/ImgViewerPROGMEM.ino
+#include "pics/hexagon_28x32.c"
+#include "pics/greenSmiley_32x32.c"
+#include "pics/redSmiley_32x32.c"
+#include "SafeGame.hpp" // UNDEFINED_CODE_ELEMENT
+
+// ----------------------------------------------------------------------------
+/// \brief     Turn off rgb led strip
+/// \detail    Timer calls this function
+/// \warning   
+/// \return    
+/// \todo      
+///
+bool turnOffRgbStrip(Adafruit_NeoPixel *neoPixels )
+{
+  neoPixels->clear();
+  neoPixels->show();
+  return true; // repeat? true
+}
+
 
 Safe::Safe() : m_errorCode(RC_OK),
 m_ha40p(),
 m_lock(),
-m_lastDebounceTime(0),
-codeNumber(0),
-countDirection(CW),
-m_lastAngleDeg(0.0),
-m_offset(0.0)
+m_offsetDeg(0.0),
+m_initStatus(INIT_NOT_COMPLETE)
 {
 
 }
@@ -51,289 +69,137 @@ m_offset(0.0)
 /// \return    RC_Type
 /// \todo      Polarisation?
 ///
-uint8_t Safe::initialize(Adafruit_Protomatter* matrix, SerialHandler* serialHandler)
+uint8_t Safe::initialize(Adafruit_Protomatter* matrix, SerialHandler *serialHandler, Adafruit_NeoPixel *neoPixels, Timer<1, millis, Adafruit_NeoPixel *>* rbgStripTimer)
 {
-	m_errorCode = m_ha40p.initialize(serialHandler);
-	if (m_errorCode != RC_OK) return m_errorCode;
-
-	m_errorCode = m_lock.initialize();
-	if (m_errorCode != RC_OK) return m_errorCode;
-
-	m_code[0] = FIRST_CODE_ELEMENT;
-	m_code[1] = SECOND_CODE_ELEMENT;
-	m_code[2] = THIRD_CODE_ELEMENT;
-	codeNumber = 0;
-	countDirection = CW;
-	m_lastAngleDeg = 0.0;
-
-	// Get Offset
-	m_errorCode = m_ha40p.getAngleDeg(m_angleDeg);
-	m_offset = m_angleDeg;
-
-	// State Machine
-	stm_entryFlag = TRUE;
-	stm_exitFlag = FALSE;
-	stm_newState = STM_STATE_SAFE_INIT;
-
-	m_matrix = matrix;
-
-	return m_errorCode;
+  if (m_initStatus == INIT_NOT_COMPLETE)
+  {
+    m_matrix          = matrix;
+    m_neoPixels       = neoPixels;
+    m_rbgStripTimer   = rbgStripTimer;
+  
+    m_errorCode       = m_lock.initialize();
+    if (m_errorCode != RC_OK) return m_errorCode;
+  
+    m_errorCode       = m_ha40p.initialize(serialHandler);
+    if (m_errorCode != RC_OK) return m_errorCode;
+  
+    // Get Offset
+    setNullPosition();  
+  }
+  m_initStatus = INIT_COMPLETE;
+  
+  return m_errorCode;
 }
 
 // ----------------------------------------------------------------------------
-/// \brief     Check safe code
-/// \detail    Checks the code for the safe. The code must be entered clockwise, hold, counter clockwise, hold, ...
+/// \brief     Set current position to zero
+/// \detail    Used to set offset
 /// \warning   
 /// \return    RC_Type
 /// \todo      
 ///
-uint8_t Safe::checkCode()
+void Safe::setNullPosition()
 {
-	m_errorCode = m_ha40p.getAngleDeg(m_angleDeg);
-
-	switch (stm_actState)
-	{
-	case STM_STATE_SAFE_INIT:
-		// Entry action
-		if (stm_entryFlag == TRUE)
-		{
-#ifdef DEBUG
-			Serial.println(F("Entered STM_STATE_SAFE_INIT"));
-#endif
-			stm_newState = STM_STATE_SAFE_FIRST_DIGIT;
-			stm_entryFlag = FALSE;
-			stm_exitFlag = TRUE;
-		}
-		// Get Offset
-		m_offset = m_angleDeg;
-
-		// Exit
-		if (stm_exitFlag == TRUE)
-		{
-			//clearScreen();
-			stm_exitFlag = FALSE;
-			stm_actState = stm_newState;
-			stm_entryFlag = TRUE;
-		}
-		break;
-
-	case STM_STATE_SAFE_FIRST_DIGIT:
-
-		if (stm_entryFlag == TRUE)
-		{
-#ifdef DEBUG
-			Serial.println(F("Entered STM_STATE_SAFE_FIRST_DIGIT"));
-#endif
-			stm_newState = STM_STATE_SAFE_FIRST_DIGIT;
-			stm_entryFlag = FALSE;
-			stm_exitFlag = FALSE;
-		}
-
-		// Get value to display
-		m_Values[0] = uint8_t((m_angleDeg - m_offset) / STEP_SIZE);
-
-		showCode(m_Values);
-
-		if (directionChanged())
-		{
-			stm_newState = STM_STATE_SAFE_SECOND_DIGIT;
-			stm_exitFlag = TRUE;
-		}
-
-		break;
-
-
-	case STM_STATE_SAFE_SECOND_DIGIT:
-
-		if (directionChanged())
-		{
-			stm_newState = STM_STATE_SAFE_THIRD_DIGIT;
-			stm_exitFlag = TRUE;
-		}
-
-		break;
-
-	case STM_STATE_SAFE_THIRD_DIGIT:
-
-		if (directionChanged())
-		{
-			stm_newState = STM_STATE_SAFE_FOURTH_DIGIT;
-			stm_exitFlag = TRUE;
-		}
-		break;
-
-	case STM_STATE_SAFE_FOURTH_DIGIT:
-
-		if (directionChanged())
-		{
-			stm_newState = STM_STATE_SAFE_CHECK_CODE;
-			stm_exitFlag = TRUE;
-		}
-		break;
-
-
-	case STM_STATE_SAFE_CHECK_CODE:
-		break;
-
-		//==============================================================================
-  // DEFAULT
-  //==============================================================================
-	default:
-#ifdef DEBUG
-		Serial.println(F("Entered STM_STATE_SAFE_DEFAULT"));
-#endif
-		break;
-
-	}
-
-
-	/*
-
-	  // Check rotation. If roation is
-	  // First: CW, second: CCW, third: CW, ...
-	  if (codeNumber % 2 == 0)
-	  {
-		if( countDirection != CW)
-		{
-		  #ifdef DEBUG
-			Serial.print(F("Wrong roatation direction: Expected CW, get CCW. Code Number: "));
-			Serial.println(codeNumber);
-			Serial.print(F("Angle in Degree: "));
-			Serial.println(m_angleDeg);
-			Serial.print(F("Last Angle in Degree: "));
-			Serial.println(m_lastAngleDeg);
-		  #endif
-			codeNumber = 0;
-			return INVALID_CODE;
-		 }
-	  }
-	  else
-	  {
-		  if( countDirection != CCW)
-		  {
-			#ifdef DEBUG
-			  Serial.print(F("Wrong roatation direction: Expected CCW, get CW. Code Number: "));
-			  Serial.println(codeNumber);
-			  Serial.print(F("Angle in Degree: "));
-			  Serial.println(m_angleDeg);
-			  Serial.print(F("Last Angle in Degree: "));
-			  Serial.println(m_lastAngleDeg);
-			#endif
-			codeNumber = 0;
-			return INVALID_CODE;
-		  }
-	  }
-
-	  // Check if the value changed whitin an hysteresys
-	  if ( (m_angleDeg < (m_lastAngleDeg - ANGLE_HYSTERESYS_DEG) ) || (m_angleDeg > (m_lastAngleDeg + ANGLE_HYSTERESYS_DEG) ))
-	  {
-		// reset the debouncing timer
-		m_lastDebounceTime = millis();
-	  }
-
-	  // Check if the value was steady
-	  if ((millis() - m_lastDebounceTime) > DEBOUNCE_DELAY_ENCODER)
-	  {
-		// Reading was stable for a while
-		if ( (m_angleDeg < (m_code[codeNumber] - ANGLE_HYSTERESYS_DEG) ) || ( m_angleDeg > (m_code[codeNumber] + ANGLE_HYSTERESYS_DEG) ))
-		{
-		  #ifdef DEBUG
-			Serial.print(F("Code Element was correct. Code Element:"));
-		  #endif
-		  // Digit was correct
-		  if ( codeNumber >= NUMBER_OF_CODE_ELEMENTS)
-		  {
-			codeNumber = 0;
-			openSafe();
-			//m_lock.openLock( SAFE_OPEN_TIME_MS );
-			return CORRECT_CODE;
-		  }
-		  codeNumber++;
-		}
-	  }
-	*/
-	m_lastAngleDeg = m_angleDeg;
-	return m_errorCode;
+  m_errorCode       = m_ha40p.getAngleDeg(m_offsetDeg);
 }
 
 // ----------------------------------------------------------------------------
-/// \brief     Accuracy game for Leica Event
+/// \brief     Set current offset
 /// \detail    
 /// \warning   
 /// \return    RC_Type
-/// \todo     
+/// \todo      
 ///
-uint8_t Safe::accuracyGame()
+void Safe::setOffsetDeg(const float offset)
 {
-  getAndDisplayAngles ();
-  return m_errorCode;
+  m_offsetDeg = offset;
 }
 
+// ----------------------------------------------------------------------------
+/// \brief     Open safe
+/// \detail    
+/// \warning   
+/// \return    RC_Type
+/// \todo      
+///
 uint8_t Safe::openSafe()
 {
-	m_lock.openLock(SAFE_OPEN_TIME_MS);
-	return RC_OK;
+  m_neoPixels->clear();
+
+  for (int i = 0; i < 8; i++) {
+    m_neoPixels->setPixelColor(i, m_neoPixels->Color(255, 255, 255));
+  }
+  m_neoPixels->show();
+  m_rbgStripTimer->in((RGB_STRIP_ILLUMINATION_TIME_S*1000), turnOffRgbStrip, m_neoPixels);
+  
+  m_lock.openLock(SAFE_OPEN_TIME_MS);
+
+  return RC_OK;
 }
 
-uint8_t Safe::setNewCode()
+
+// ----------------------------------------------------------------------------
+/// \brief     Display current code of the safe (input)
+/// \detail    
+/// \warning   
+/// \return    RC_Type
+/// \todo      
+///
+uint8_t Safe::displayCode(const uint8_t * digits)
 {
-	return RC_OK;
+  m_matrix->fillScreen(BLACK);            // Fill background black
+  m_matrix->setFont(&FreeMonoBold7pt7b);  // Use nice bitmap font
+  m_matrix->setCursor(0, 8);              // Set cursor
+  m_matrix->setTextColor(WHITE);
+
+  for (uint8_t digitNumber; digitNumber < NUMBER_OF_CODE_DIGITS; digitNumber++)
+  {
+    if (digits[digitNumber] == SafeGame::UNDEFINED_CODE_ELEMENT)
+    {
+        m_matrix->print("X");
+    }
+    else
+    {
+      m_matrix->print(digits[digitNumber]);
+    }
+  }
+
+  m_matrix->show();
+  return RC_OK;
 }
 
-
-uint8_t Safe::showCode(uint8_t valuesToDisplay[])
-{
-	m_matrix->fillScreen(BLACK); // Fill background black
-	m_matrix->setFont(&Picopixel);  // Use nice bitmap font
-	m_matrix->setCursor(0, 14);
-
-	m_matrix->print(valuesToDisplay[0]);
-  m_matrix->print(valuesToDisplay[1]);
-  m_matrix->print(valuesToDisplay[2]);
-  m_matrix->print(valuesToDisplay[3]);
-
-	m_matrix->show();
-
-#ifdef DEBUG
-	Serial.print(valuesToDisplay[0]);
- Serial.print(valuesToDisplay[1]);
- Serial.print(valuesToDisplay[2]);
- Serial.println(valuesToDisplay[3]);
-#endif
-	return RC_OK;
-}
-
-uint8_t Safe::directionChanged()
-{
-	// Check direction
-	if (round(m_angleDeg) > round(m_lastAngleDeg)) // Get nearest integer (close enough for count direction :-))
-	{
-		countDirection = CW;
-	}
-	else
-	{
-		countDirection = CCW;
-	}
-	return DIRECTION_NOT_CHANGED;
-}
-
-uint8_t Safe::getAndDisplayAngles()
+// ----------------------------------------------------------------------------
+/// \brief     Display Angles (Accuracy Game)
+/// \detail    
+/// \warning   
+/// \return    RC_Type
+/// \todo      
+///
+uint8_t Safe::getAndDisplayAngles(const float targetAngleDeg, float& angleDeg)
 {
   uint8_t m_errorCode = RC_OK;
   // Get Encoder Angle and calculate degree, minute and seconds
   // https://de.planetcalc.com/1129/
-  m_errorCode = m_ha40p.getAngleDeg(m_angleDeg);
-  m_degree = (uint16_t) m_angleDeg;
-  float rest = m_angleDeg - m_degree;
+  m_errorCode = m_ha40p.getAngleDeg(angleDeg);
+  angleDeg -= m_offsetDeg;
+  if (angleDeg < 0) angleDeg += 360.0;
+
+  m_degree = (uint16_t) angleDeg;
+  float rest = angleDeg - m_degree;
   m_minute = (uint16_t)(rest * 60.0);
+#ifdef DEBUG
   Serial.print("Rest Deg: "); Serial.println(rest);
+#endif
   rest = rest - ((float)m_minute / 60.0);
+#ifdef DEBUG
   Serial.print("Rest Deg: "); Serial.println(rest);
+#endif
   m_seconds = (uint16_t)(rest * 3600.0);
+#ifdef DEBUG
   Serial.print("Angle Deg: "); Serial.println(m_degree);
   Serial.print("Angle Min: "); Serial.println(m_minute);
   Serial.print("Angle Sec: "); Serial.println(m_seconds);
-  
+#endif
   m_matrix->fillScreen(BLACK); // Fill background black
   m_matrix->setFont(&FreeMonoBold7pt7b);  // Use nice bitmap font
   m_matrix->setCursor(0, 8);
@@ -342,16 +208,108 @@ uint8_t Safe::getAndDisplayAngles()
   m_matrix->drawCircle(m_matrix->getCursorX() + 2, 1, 1, WHITE); //Degree symobl
   m_matrix->setCursor(0, 18);
   m_matrix->print(m_minute); m_matrix->println("'");
-  //m_matrix->println("32'"); 
   m_matrix->setCursor(0, 28);
-  //m_matrix->print("31"); m_matrix->write(34);
-  m_matrix->print(m_seconds); m_matrix->write(34);
+  m_matrix->print(m_seconds); m_matrix->write(34); // 34 -> Symbol "
   m_matrix->println("");
 
   // x, y, w, h, color
-  m_matrix->fillRect(0, 30, 10, 2, GREEN);
+  // Calculate bar graph
+  float differenceDeg = abs(targetAngleDeg - angleDeg);
+  float barLength = 0.0;
+  if (differenceDeg > m_barGraphResolution) differenceDeg = m_barGraphResolution;
+  barLength = WIDTH - differenceDeg / m_barGraphResolution * WIDTH;
+
+  m_matrix->fillRect(0, 30, barLength , 2, GREEN);
 
   m_matrix->show();
   return RC_OK;
+}
+
+// ----------------------------------------------------------------------------
+/// \brief     Display green smiley
+/// \detail    
+/// \warning   
+/// \return    RC_Type
+/// \todo      
+///
+void Safe::displayGreenSmiley()
+{
+  m_matrix->fillScreen(BLACK);
+  m_matrix->drawRGBBitmap(0, 0, (const uint16_t*)greenSmiley_32x32, 32, 32);
+  m_matrix->show();
+}
+
+// ----------------------------------------------------------------------------
+/// \brief     Display red smiley
+/// \detail    
+/// \warning   
+/// \return    RC_Type
+/// \todo      
+///
+void Safe::displayRedSmiley()
+{
+  m_matrix->fillScreen(BLACK);
+  m_matrix->drawRGBBitmap(0, 0, (const uint16_t*)redSmiley_32x32, 32, 32);
+  m_matrix->show();
+}
+
+// ----------------------------------------------------------------------------
+/// \brief     Display hexagon logo
+/// \detail    
+/// \warning   
+/// \return    RC_Type
+/// \todo      
+///
+void Safe::displayHexagonLogo()
+{
+  m_matrix->fillScreen(BLACK);
+  m_matrix->drawRGBBitmap(0, 0, (const uint16_t*)hexagon_28x32, 28, 32);
+  m_matrix->show();
+}
+
+void Safe::showHtcRules()
+{
   
+}
+
+
+// ----------------------------------------------------------------------------
+/// \brief     Reset display (black)
+/// \detail    
+/// \warning   
+/// \return    RC_Type
+/// \todo      
+///
+void Safe::resetDisplay()
+{
+    m_matrix->fillScreen(BLACK); // Fill background black
+    m_matrix->show();
+}
+
+// ----------------------------------------------------------------------------
+/// \brief     Set bar graph resolution
+/// \detail    
+/// \warning   
+/// \return    
+/// \todo      
+///
+void Safe::setBarGraphResolution( const float barGraphResolution)
+{
+  m_barGraphResolution = barGraphResolution;
+}
+
+
+// ----------------------------------------------------------------------------
+/// \brief     Get angle in degree
+/// \detail    
+/// \warning   
+/// \return    RC_Type
+/// \todo      
+///
+uint8_t Safe::getAngleDeg( float& angleDeg)
+{
+  m_errorCode = m_ha40p.getAngleDeg(angleDeg);
+  angleDeg -= m_offsetDeg;
+  if (angleDeg < 0) angleDeg += 360.0;
+  return m_errorCode;
 }

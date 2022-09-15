@@ -30,7 +30,7 @@
 #include "Lock.hpp"
 #include "config.hpp"
 
-Lock::Lock()
+Lock::Lock() : m_initStatus(INIT_NOT_COMPLETE)
 {
   
 }
@@ -44,9 +44,14 @@ Lock::Lock()
 ///
 uint8_t Lock::initialize()
 {
-  pinMode(LOCK_PIN, OUTPUT);
-  digitalWrite(LOCK_PIN, LOW);
-  return 0;
+  if (m_initStatus == INIT_NOT_COMPLETE)
+  {
+    pinMode(LOCK_PIN, OUTPUT);
+    digitalWrite(LOCK_PIN, LOW);
+  }
+  m_initStatus = INIT_COMPLETE;
+  
+  return RC_OK;
 }
 
 // ----------------------------------------------------------------------------

@@ -43,7 +43,7 @@
 #define SHOW_HTC
 
 #define UART_SPEED		( 230400 )
-#undef DEBUG			          // Serial Debug enable
+#define DEBUG			          // Serial Debug enable
 
 #define HEIGHT			( 32 )  // Matrix height (pixels) - SET TO 64 FOR 64x64 MATRIX!
 #define WIDTH			  ( 32 )  // Matrix width (pixels)
@@ -69,8 +69,11 @@ const uint8_t RC_INV_UART1_COMMAND = 2;
 const uint8_t RC_INV_UART1_TIMEOUT = 3;
 
 
-const uint8_t INVALID_CODE = 1;
-const uint8_t CORRECT_CODE = 2;
+const uint8_t INVALID_CODE        = 1;
+const uint8_t CORRECT_CODE        = 2;
+
+const uint8_t INIT_NOT_COMPLETE   = 0;  /// Init complete
+const uint8_t INIT_COMPLETE       = 1;  /// Init not complete
 
 const char SOFTWARE_VERSION[10] = "V1.0";
 
