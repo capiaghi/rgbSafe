@@ -217,7 +217,7 @@ void loop()
       Serial.println(F("Entered STM_STATE_SAFE_MODE"));
 #endif
       openSafeTimer.cancel();
-      safeGame.initialize(&safe);
+      safeGame.reset();
       stm_entryFlag = FALSE;
     }
 
@@ -296,7 +296,7 @@ void loop()
 
 		// Exit
 		if (stm_exitFlag == TRUE)
-		{ö
+		{
 			//clearScreen();
 			stm_exitFlag = FALSE;
 			stm_actState = stm_newState;
@@ -315,7 +315,7 @@ void loop()
 
 bool changeState(void *)
 {
-    stm_newState = STM_STATE_STARTUP;
+    stm_newState = STM_STATE_SAFE_MODE;
     stm_exitFlag = TRUE;
   return true;
 }
@@ -335,7 +335,7 @@ void showHTCRules()
   hue = 0;
 
  // Set up the scrolling message...
-  sprintf(str, "HTC Rules!"); 
+  sprintf(str, "Wolfi Rules!"); 
   matrix.setFont(&FreeSansBold18pt7b);  // Use nice bitmap font
   matrix.setTextWrap(false);            // Allow text off edge
   matrix.setTextColor(WHITE);           // White

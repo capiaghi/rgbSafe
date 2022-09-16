@@ -38,7 +38,6 @@
 /// \todo      Polarisation?
 ///
 SafeGame::SafeGame() : m_errorCode(RC_OK),
-                       m_offsetDeg(0.0),
                        m_currentDigit(1)
 {
 
@@ -60,10 +59,6 @@ uint8_t SafeGame::initialize(Safe* safe)
 
   m_safe            = safe;
 
-  // Get Offset
-  m_errorCode       = m_safe->getAngleDeg(m_angleDeg);
-  m_offsetDeg       = m_angleDeg;
-
   // Init with not yet defined
   for (uint8_t digit; digit < NUMBER_OF_CODE_ELEMENTS; digit++)
   {
@@ -78,6 +73,7 @@ uint8_t SafeGame::initialize(Safe* safe)
   m_currentDigit = 0;
   m_lastCodeElement = 0;
   m_sign = -1;
+  reset();
   return m_errorCode;
 }
 
@@ -125,13 +121,6 @@ uint8_t SafeGame::run()
     m_safe->setNullPosition(); // Set current offset to zero position
     m_safe->displayCode(m_currentCode); /// Show XXXX
 
-
-
-#ifdef DEBUG
-    Serial.println("Offset");
-    Serial.println(m_offsetDeg);
-#endif
-
     // Exit
     if (stm_exitFlag == TRUE)
     {
@@ -156,6 +145,7 @@ uint8_t SafeGame::run()
       stm_exitFlag = FALSE;
       m_currentCodeElement = 0;
       m_lastCodeElement = 0;
+      m_first = true;
     }
 
     m_errorCode = m_safe->getAngleDeg(m_angleDeg); // Get position
@@ -165,6 +155,7 @@ uint8_t SafeGame::run()
       m_angleDeg = 360.0 - m_angleDeg;
     }
 
+    // Search code segment
     m_code_found = false;
     for (uint8_t i = 0; i < NUMBER_OF_CODE_DISK_ELEMENTS && !m_code_found; i++)
     {
@@ -181,8 +172,6 @@ uint8_t SafeGame::run()
         m_lastCodeElement = m_currentCodeElement;
     }
 
-    
-
 #ifdef DEBUG
       Serial.println(F("m_currentCodeElement"));
       Serial.println(m_currentCodeElement);
@@ -195,23 +184,24 @@ uint8_t SafeGame::run()
       m_lastCodeElement             = m_currentCodeElement;
       m_currentCode[m_currentDigit] = m_currentCodeElement;
       m_safe->displayCode(m_currentCode);
+      m_first = false;
     } 
     else if (m_currentCodeElement < m_lastCodeElement)
     {
       m_lastCodeElement             = m_currentCodeElement;
       if (m_currentDigit >= NUMBER_OF_CODE_ELEMENTS - 1)
       {
-        stm_newState  = STM_STATE_SAFE_CHECK_CODE;
-        stm_entryFlag = FALSE;
-        stm_exitFlag  = TRUE;
-        m_currentDigit = 0;
+        stm_newState    = STM_STATE_SAFE_CHECK_CODE;
+        stm_entryFlag   = FALSE;
+        stm_exitFlag    = TRUE;
+        m_currentDigit  = 0;
       }
       else
       {
         m_sign *= (-1); // Change sign
         m_safe->setNullPosition();
-        m_lastCodeElement = 0;
-        m_currentCodeElement = 0;
+        m_lastCodeElement     = 0;
+        m_currentCodeElement  = 0;
         m_currentDigit++;
       }
     }
